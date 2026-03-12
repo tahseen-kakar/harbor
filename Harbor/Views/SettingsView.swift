@@ -63,3 +63,9 @@ struct SettingsView: View {
         .formStyle(.grouped)
     }
 }
+
+#Preview("Settings") {
+    SettingsView(settings: HarborPreviewFixtures.makeSettings())
+        .frame(width: 520, height: 420)
+        .padding(20)
+}

@@ -53,3 +53,8 @@ struct SidebarView: View {
         }
     }
 }
+
+#Preview("Sidebar") {
+    SidebarView(center: HarborPreviewFixtures.makeCenter())
+        .frame(width: 260, height: 760)
+}

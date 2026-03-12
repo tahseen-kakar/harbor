@@ -79,3 +79,11 @@ struct RootView: View {
         }
     }
 }
+
+#Preview("Harbor Window") {
+    let settings = HarborPreviewFixtures.makeSettings()
+    let center = HarborPreviewFixtures.makeCenter()
+
+    RootView(center: center, settings: settings)
+        .frame(width: 1_320, height: 820)
+}

@@ -414,6 +414,11 @@ struct DownloadDetailView: View {
     }
 }
 
+#Preview("Download Detail") {
+    DownloadDetailView(center: HarborPreviewFixtures.makeCenter())
+        .frame(width: 420, height: 760)
+}
+
 private struct GlassButtonModifier: ViewModifier {
     let prominent: Bool
 

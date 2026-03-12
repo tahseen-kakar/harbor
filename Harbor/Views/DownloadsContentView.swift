@@ -156,3 +156,8 @@ struct DownloadsContentView: View {
         }
     }
 }
+
+#Preview("Downloads List") {
+    DownloadsContentView(center: HarborPreviewFixtures.makeCenter())
+        .frame(width: 760, height: 520)
+}
