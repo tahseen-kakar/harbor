@@ -1,13 +1,13 @@
 import Foundation
 
 struct DownloadDestinationResolver {
-    private let fileManager: FileManager
+    nonisolated(unsafe) private let fileManager: FileManager
 
-    init(fileManager: FileManager = .default) {
+    nonisolated init(fileManager: FileManager = .default) {
         self.fileManager = fileManager
     }
 
-    func resolvedFilename(
+    nonisolated func resolvedFilename(
         custom: String?,
         responseSuggestedFilename: String?,
         sourceURL: URL
@@ -38,7 +38,7 @@ struct DownloadDestinationResolver {
         return sanitize(candidate)
     }
 
-    func uniqueDestinationURL(for filename: String, in directory: URL) -> URL {
+    nonisolated func uniqueDestinationURL(for filename: String, in directory: URL) -> URL {
         let cleanName = sanitize(filename)
         let baseURL = directory.appendingPathComponent(cleanName)
 
@@ -69,7 +69,7 @@ struct DownloadDestinationResolver {
         }
     }
 
-    func moveDownloadedFile(
+    nonisolated func moveDownloadedFile(
         from temporaryURL: URL,
         customFilename: String?,
         responseSuggestedFilename: String?,
@@ -93,7 +93,7 @@ struct DownloadDestinationResolver {
         return destinationURL
     }
 
-    private func sanitize(_ filename: String) -> String {
+    private nonisolated func sanitize(_ filename: String) -> String {
         let replaced = filename
             .replacingOccurrences(of: "/", with: "-")
             .replacingOccurrences(of: ":", with: "-")
@@ -104,7 +104,7 @@ struct DownloadDestinationResolver {
 }
 
 private extension String {
-    var nilIfEmpty: String? {
+    nonisolated var nilIfEmpty: String? {
         isEmpty ? nil : self
     }
 }

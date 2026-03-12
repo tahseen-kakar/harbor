@@ -8,7 +8,7 @@ struct Aria2BinaryResolver {
             case standardLocation
             case pathLookup
 
-            var displayName: String {
+            nonisolated var displayName: String {
                 switch self {
                 case .bundled:
                     "Bundled with Harbor"
@@ -27,18 +27,18 @@ struct Aria2BinaryResolver {
     }
 
     struct Context {
-        let fileManager: FileManager
+        nonisolated(unsafe) let fileManager: FileManager
         let environment: [String: String]
         let bundledResourceRoots: [URL]
         let candidatePaths: [String]
-        let pathLookup: () -> URL?
+        let pathLookup: @Sendable () -> URL?
 
-        init(
+        nonisolated init(
             fileManager: FileManager = .default,
             environment: [String: String] = ProcessInfo.processInfo.environment,
             bundledResourceRoots: [URL] = Self.defaultBundledResourceRoots(),
             candidatePaths: [String] = Self.defaultCandidatePaths,
-            pathLookup: @escaping () -> URL? = Aria2BinaryResolver.resolveFromPATH
+            pathLookup: @escaping @Sendable () -> URL? = Aria2BinaryResolver.resolveFromPATH
         ) {
             self.fileManager = fileManager
             self.environment = environment
@@ -47,26 +47,38 @@ struct Aria2BinaryResolver {
             self.pathLookup = pathLookup
         }
 
-        private static let defaultCandidatePaths = [
+        nonisolated private static let defaultCandidatePaths = [
             "/opt/homebrew/bin/aria2c",
             "/usr/local/bin/aria2c",
             "/opt/local/bin/aria2c"
         ]
 
-        private static func defaultBundledResourceRoots() -> [URL] {
-            [
-                Bundle.main.resourceURL
-            ].compactMap { $0 }
+        nonisolated private static func defaultBundledResourceRoots() -> [URL] {
+            var roots: [URL] = []
+            var seenPaths = Set<String>()
+
+            for resourceURL in [
+                Bundle.main.resourceURL,
+                Bundle(for: BundleToken.self).resourceURL
+            ].compactMap({ $0 }) {
+                guard seenPaths.insert(resourceURL.path).inserted else {
+                    continue
+                }
+
+                roots.append(resourceURL)
+            }
+
+            return roots
         }
     }
 
-    static let installHint = "Harbor couldn’t find a compatible bundled torrent engine. Reinstall the app, or set `ARIA2C_PATH` to a portable `aria2c` runtime."
+    nonisolated static let installHint = "Harbor couldn’t find a compatible bundled torrent engine. Reinstall the app, or set `ARIA2C_PATH` to a portable `aria2c` runtime."
 
-    static func resolveBinaryURL() -> URL? {
+    nonisolated static func resolveBinaryURL() -> URL? {
         resolveBinary()?.url
     }
 
-    static func resolveBinary(using context: Context = Context()) -> Resolution? {
+    nonisolated static func resolveBinary(using context: Context = Context()) -> Resolution? {
         if let bundledBinary = resolveBundledRuntime(using: context) {
             return bundledBinary
         }
@@ -96,7 +108,7 @@ struct Aria2BinaryResolver {
         )
     }
 
-    private static func resolveBundledRuntime(using context: Context) -> Resolution? {
+    private nonisolated static func resolveBundledRuntime(using context: Context) -> Resolution? {
         for root in context.bundledResourceRoots {
             let candidateURLs = [
                 root
@@ -118,7 +130,7 @@ struct Aria2BinaryResolver {
         return nil
     }
 
-    private static func resolveFromPATH() -> URL? {
+    private nonisolated static func resolveFromPATH() -> URL? {
         let process = Process()
         let outputPipe = Pipe()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
@@ -147,7 +159,7 @@ struct Aria2BinaryResolver {
         return URL(fileURLWithPath: path)
     }
 
-    private static var runtimeArchitectureName: String {
+    private nonisolated static var runtimeArchitectureName: String {
         #if arch(arm64)
         "arm64"
         #elseif arch(x86_64)
@@ -157,3 +169,5 @@ struct Aria2BinaryResolver {
         #endif
     }
 }
+
+private final class BundleToken: NSObject {}
