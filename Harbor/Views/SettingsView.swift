@@ -2,10 +2,15 @@ import SwiftUI
 
 struct SettingsView: View {
     let settings: AppSettingsStore
+    @Environment(\.openURL) private var openURL
+
+    @State private var isCheckingForUpdates = false
+    @State private var updateStatusMessage: String?
+    @State private var availableRelease: AppUpdateChecker.Release?
+    @State private var activeAlert: UserAlert?
 
     var body: some View {
         @Bindable var settings = settings
-        let aria2Resolution = Aria2BinaryResolver.resolveBinary()
 
         Form {
             Section("General") {
@@ -35,37 +40,122 @@ struct SettingsView: View {
                 Toggle("Start downloads immediately", isOn: $settings.startDownloadsAutomatically)
             }
 
-            Section("Behavior") {
-                Text("Active downloads use native `URLSessionDownloadTask` transfers with pause and resume support when the server exposes resume data.")
-                    .foregroundStyle(.secondary)
-                Text("Magnet links and `.torrent` files are routed through `aria2c` over local JSON-RPC so the app can stay native while delegating BitTorrent protocol work to a dedicated engine.")
-                    .foregroundStyle(.secondary)
-                Text("Completed files are stored directly on disk and the queue history is persisted in Application Support.")
-                    .foregroundStyle(.secondary)
-            }
-
-            Section("Torrent Engine") {
-                LabeledContent("Status") {
-                    Text(aria2Resolution?.source.displayName ?? "Unavailable")
-                        .foregroundStyle(aria2Resolution == nil ? Color.red : Color.secondary)
-                        .multilineTextAlignment(.trailing)
-                }
-                LabeledContent("aria2c") {
-                    Text(aria2Resolution?.url.path ?? "Not found")
+            Section("Updates") {
+                LabeledContent("Current Version") {
+                    Text(currentVersionLabel)
                         .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.trailing)
-                        .textSelection(.enabled)
                 }
-                Text("Release builds should include Harbor’s bundled aria2 runtime so users can install the app and use torrents immediately. `ARIA2C_PATH` remains available as a development override.")
+
+                if let availableRelease {
+                    LabeledContent("Latest Release") {
+                        Text(availableRelease.version)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                HStack(spacing: 10) {
+                    Button("Check for Updates…") {
+                        Task {
+                            await checkForUpdates()
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(isCheckingForUpdates)
+
+                    if isCheckingForUpdates {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else if let availableRelease {
+                        Button("Download Update") {
+                            openURL(availableRelease.preferredDownloadURL)
+                        }
+                    }
+                }
+
+                Text(updateStatusMessage ?? "Check Harbor's GitHub Releases for a newer build.")
+                    .foregroundStyle(.secondary)
+
+                Text("When an update is available, Harbor opens the latest DMG, package, ZIP asset, or the public release page so users can install the newest build.")
                     .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
+        .confirmationDialog(
+            "Update Available",
+            isPresented: isShowingUpdateDialog,
+            titleVisibility: .visible,
+            presenting: availableRelease
+        ) { release in
+            Button("Download Update") {
+                openURL(release.preferredDownloadURL)
+            }
+
+            Button("View Release Notes") {
+                openURL(release.htmlURL)
+            }
+
+            Button("Not Now", role: .cancel) {}
+        } message: { release in
+            Text("\(release.displayName) is available. You're running Harbor \(currentVersionLabel).")
+        }
+        .alert(item: $activeAlert) { alert in
+            Alert(
+                title: Text(alert.title),
+                message: Text(alert.message),
+                dismissButton: .default(Text("OK"))
+            )
+        }
+    }
+
+    private var currentVersionLabel: String {
+        let shortVersion = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "Unknown"
+        let build = (Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String) ?? ""
+
+        if build.isEmpty || build == shortVersion {
+            return shortVersion
+        }
+
+        return "\(shortVersion) (\(build))"
+    }
+
+    private var isShowingUpdateDialog: Binding<Bool> {
+        Binding(
+            get: { availableRelease != nil },
+            set: { isPresented in
+                if isPresented == false {
+                    availableRelease = nil
+                }
+            }
+        )
+    }
+
+    @MainActor
+    private func checkForUpdates() async {
+        isCheckingForUpdates = true
+        availableRelease = nil
+        updateStatusMessage = nil
+        defer { isCheckingForUpdates = false }
+
+        do {
+            switch try await AppUpdateChecker.checkForUpdates() {
+            case let .upToDate(currentVersion):
+                updateStatusMessage = "Harbor \(currentVersion) is already up to date."
+
+            case let .updateAvailable(currentVersion, release):
+                updateStatusMessage = "\(release.displayName) is available. You're running Harbor \(currentVersion)."
+                availableRelease = release
+            }
+        } catch {
+            activeAlert = UserAlert(
+                title: "Unable to Check for Updates",
+                message: error.localizedDescription
+            )
+        }
     }
 }
 
 #Preview("Settings") {
     SettingsView(settings: HarborPreviewFixtures.makeSettings())
-        .frame(width: 520, height: 420)
+        .frame(width: 520, height: 520)
         .padding(20)
 }
