@@ -56,6 +56,7 @@
 				0DA35C512F6338930095E98E /* Frameworks */,
 				0DA35C522F6338930095E98E /* Resources */,
 				0DFA3D392F6F7A79006B52A1 /* Copy TorrentRuntime */,
+				0D190F562F6365560036F3C2 /* Sign Embedded Torrent Runtime */,
 			);
 			buildRules = (
 			);
@@ -116,6 +117,24 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		0D190F562F6365560036F3C2 /* Sign Embedded Torrent Runtime */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Sign Embedded Torrent Runtime";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -euo pipefail\n\nAPP_PATH=\"${TARGET_BUILD_DIR}/${WRAPPER_NAME}\"\nRUNTIME_DIR=\"${APP_PATH}/Contents/Resources/TorrentRuntime/arm64\"\n\nSIGN_IDENTITY=\"${EXPANDED_CODE_SIGN_IDENTITY_NAME}\"\n\nif [ ! -d \"$RUNTIME_DIR\" ]; then\n  echo \"TorrentRuntime not found at $RUNTIME_DIR\"\n  exit 0\nfi\n\necho \"Signing embedded dylibs and aria2c with identity: $SIGN_IDENTITY\"\n\n# Sign dylibs first\nfind \"$RUNTIME_DIR/lib\" -type f \\( -name \"*.dylib\" \\) | while read -r file; do\n  echo \"Signing dylib: $file\"\n  codesign --force --sign \"$SIGN_IDENTITY\" --options runtime --timestamp \"$file\"\ndone\n\n# Sign executable last\nif [ -f \"$RUNTIME_DIR/bin/aria2c\" ]; then\n  echo \"Signing aria2c\"\n  codesign --force --sign \"$SIGN_IDENTITY\" --options runtime --timestamp \"$RUNTIME_DIR/bin/aria2c\"\nfi\n";
+		};
 		0DFA3D392F6F7A79006B52A1 /* Copy TorrentRuntime */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;

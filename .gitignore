@@ -9,6 +9,14 @@ xcuserdata/
 .build/
 DerivedData/
 build/
+*.xcarchive
+*.dSYM
+*.dSYM.zip
+*.xcresult
+*.ipa
+*.pkg
+*.dmg
+*.xcent
 
 # Misc
 *.moved-aside
