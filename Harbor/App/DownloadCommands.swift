@@ -2,9 +2,15 @@ import SwiftUI
 
 struct DownloadCommands: Commands {
     let center: DownloadCenter
+    let updater: AppUpdater
 
     var body: some Commands {
         SidebarCommands()
+
+        CommandGroup(after: .appInfo) {
+            CheckForUpdatesCommandView(updater: updater)
+            Divider()
+        }
 
         CommandMenu("Downloads") {
             Button("New Download...") {

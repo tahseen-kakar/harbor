@@ -4,11 +4,13 @@ import SwiftUI
 struct HarborApp: App {
     @State private var settings: AppSettingsStore
     @State private var center: DownloadCenter
+    @StateObject private var updater: AppUpdater
 
     init() {
         let settings = AppSettingsStore()
         _settings = State(initialValue: settings)
         _center = State(initialValue: DownloadCenter(settings: settings))
+        _updater = StateObject(wrappedValue: AppUpdater())
     }
 
     var body: some Scene {
@@ -24,11 +26,11 @@ struct HarborApp: App {
         .windowToolbarStyle(.unified)
         .windowResizability(.contentMinSize)
         .commands {
-            DownloadCommands(center: center)
+            DownloadCommands(center: center, updater: updater)
         }
 
         Settings {
-            SettingsView(settings: settings)
+            SettingsView(settings: settings, updater: updater)
                 .frame(width: 480, height: 340)
                 .padding(20)
         }

@@ -17,6 +17,14 @@ build/
 *.pkg
 *.dmg
 *.xcent
+*.p12
+*.p8
+*.cer
+*.mobileprovision
+Secrets/
+.env
+.env.*
+.worktrees/
 
 # Misc
 *.moved-aside

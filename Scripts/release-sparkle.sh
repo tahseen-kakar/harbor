@@ -1,0 +1,157 @@
+#!/bin/sh
+
+set -eu
+
+PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+PROJECT_NAME="Harbor"
+APP_PATH="${1:-}"
+PAGES_WORKTREE="${PAGES_WORKTREE:-$PROJECT_DIR/.worktrees/gh-pages}"
+PAGES_BRANCH="${PAGES_BRANCH:-gh-pages}"
+PAGES_REMOTE="${PAGES_REMOTE:-origin}"
+UPDATES_SUBDIR="${UPDATES_SUBDIR:-updates}"
+OUTPUT_DIR="${OUTPUT_DIR:-$PROJECT_DIR/build/release}"
+UPLOAD_RELEASE="${UPLOAD_RELEASE:-NO}"
+RELEASE_TAG="${RELEASE_TAG:-}"
+RELEASE_NOTES_PATH="${RELEASE_NOTES_PATH:-}"
+SPARKLE_BIN_DIR="${SPARKLE_BIN_DIR:-}"
+DOWNLOAD_URL_PREFIX="${DOWNLOAD_URL_PREFIX:-https://tahseen-kakar.github.io/harbor/$UPDATES_SUBDIR}"
+PUBLIC_FEED_URL="${PUBLIC_FEED_URL:-https://tahseen-kakar.github.io/harbor/appcast.xml}"
+
+if [ -z "$APP_PATH" ]; then
+  echo "Usage: $0 /path/to/exported/Harbor.app" >&2
+  exit 1
+fi
+
+if [ ! -d "$APP_PATH" ]; then
+  echo "Expected an exported app bundle at: $APP_PATH" >&2
+  exit 1
+fi
+
+if [ -z "$SPARKLE_BIN_DIR" ]; then
+  SPARKLE_BIN_DIR="$(find "$HOME/Library/Developer/Xcode/DerivedData" -path '*/SourcePackages/artifacts/sparkle/Sparkle/bin' -type d 2>/dev/null | head -n 1 || true)"
+fi
+
+if [ -z "$SPARKLE_BIN_DIR" ] || [ ! -x "$SPARKLE_BIN_DIR/generate_appcast" ]; then
+  echo "Sparkle tools not found. Set SPARKLE_BIN_DIR to the directory containing generate_appcast and generate_keys." >&2
+  exit 1
+fi
+
+VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Contents/Info.plist" 2>/dev/null || true)"
+BUILD_NUMBER="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Contents/Info.plist" 2>/dev/null || true)"
+
+if [ -z "$VERSION" ] || [ -z "$BUILD_NUMBER" ]; then
+  echo "Unable to read CFBundleShortVersionString / CFBundleVersion from exported app." >&2
+  exit 1
+fi
+
+if [ -z "$RELEASE_TAG" ]; then
+  RELEASE_TAG="v$VERSION"
+fi
+
+EXPECTED_TAG="v$VERSION"
+if [ "$RELEASE_TAG" != "$EXPECTED_TAG" ]; then
+  echo "RELEASE_TAG must match MARKETING_VERSION. Expected $EXPECTED_TAG, got $RELEASE_TAG." >&2
+  exit 1
+fi
+
+DMG_NAME="$PROJECT_NAME-$VERSION.dmg"
+DMG_PATH="$OUTPUT_DIR/$DMG_NAME"
+STAGING_ROOT="$PROJECT_DIR/build/dmg-root"
+
+mkdir -p "$OUTPUT_DIR"
+rm -rf "$STAGING_ROOT"
+mkdir -p "$STAGING_ROOT"
+
+ditto "$APP_PATH" "$STAGING_ROOT/$PROJECT_NAME.app"
+ln -s /Applications "$STAGING_ROOT/Applications"
+rm -f "$DMG_PATH"
+
+echo "Creating $DMG_NAME from exported app..."
+hdiutil create \
+  -volname "$PROJECT_NAME" \
+  -srcfolder "$STAGING_ROOT" \
+  -ov \
+  -format UDZO \
+  "$DMG_PATH" >/dev/null
+
+ensure_pages_worktree() {
+  mkdir -p "$(dirname "$PAGES_WORKTREE")"
+
+  if [ -e "$PAGES_WORKTREE/.git" ] || [ -d "$PAGES_WORKTREE/.git" ]; then
+    return
+  fi
+
+  if git show-ref --verify --quiet "refs/heads/$PAGES_BRANCH"; then
+    git worktree add "$PAGES_WORKTREE" "$PAGES_BRANCH"
+    return
+  fi
+
+  if git ls-remote --exit-code --heads "$PAGES_REMOTE" "$PAGES_BRANCH" >/dev/null 2>&1; then
+    git worktree add -B "$PAGES_BRANCH" "$PAGES_WORKTREE" "$PAGES_REMOTE/$PAGES_BRANCH"
+    return
+  fi
+
+  git worktree add --detach "$PAGES_WORKTREE"
+  git -C "$PAGES_WORKTREE" switch --orphan "$PAGES_BRANCH"
+  find "$PAGES_WORKTREE" -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
+  touch "$PAGES_WORKTREE/.nojekyll"
+  git -C "$PAGES_WORKTREE" add .nojekyll
+  git -C "$PAGES_WORKTREE" commit -m "Initialize gh-pages"
+}
+
+ensure_pages_worktree
+
+UPDATES_DIR="$PAGES_WORKTREE/$UPDATES_SUBDIR"
+mkdir -p "$UPDATES_DIR"
+
+cp "$DMG_PATH" "$UPDATES_DIR/$DMG_NAME"
+
+if [ -n "$RELEASE_NOTES_PATH" ]; then
+  if [ ! -f "$RELEASE_NOTES_PATH" ]; then
+    echo "Release notes file not found: $RELEASE_NOTES_PATH" >&2
+    exit 1
+  fi
+
+  RELEASE_NOTES_EXTENSION="${RELEASE_NOTES_PATH##*.}"
+  cp "$RELEASE_NOTES_PATH" "$UPDATES_DIR/$PROJECT_NAME-$VERSION.$RELEASE_NOTES_EXTENSION"
+fi
+
+echo "Generating Sparkle appcast..."
+if [ -n "$RELEASE_NOTES_PATH" ]; then
+  "$SPARKLE_BIN_DIR/generate_appcast" \
+    --download-url-prefix "$DOWNLOAD_URL_PREFIX" \
+    --release-notes-url-prefix "$DOWNLOAD_URL_PREFIX" \
+    -o "$PAGES_WORKTREE/appcast.xml" \
+    "$UPDATES_DIR"
+else
+  "$SPARKLE_BIN_DIR/generate_appcast" \
+    --download-url-prefix "$DOWNLOAD_URL_PREFIX" \
+    -o "$PAGES_WORKTREE/appcast.xml" \
+    "$UPDATES_DIR"
+fi
+
+touch "$PAGES_WORKTREE/.nojekyll"
+
+git -C "$PAGES_WORKTREE" add appcast.xml .nojekyll "$UPDATES_SUBDIR"
+
+if git -C "$PAGES_WORKTREE" diff --cached --quiet; then
+  echo "No Sparkle site changes to commit."
+else
+  git -C "$PAGES_WORKTREE" commit -m "Publish $PROJECT_NAME $VERSION"
+  git -C "$PAGES_WORKTREE" push "$PAGES_REMOTE" "$PAGES_BRANCH"
+fi
+
+if [ "$UPLOAD_RELEASE" = "YES" ]; then
+  gh release upload "$RELEASE_TAG" "$DMG_PATH" --repo tahseen-kakar/harbor --clobber
+fi
+
+echo
+echo "Sparkle publish complete."
+echo "Feed URL: $PUBLIC_FEED_URL"
+echo "DMG: $DMG_PATH"
+echo "Pages worktree: $PAGES_WORKTREE"
+echo
+echo "Private material that must stay off-repo:"
+echo "  - Sparkle private EdDSA key"
+echo "  - Apple certificate exports (.p12) and passwords"
+echo "  - notarytool credentials / app-specific passwords"
