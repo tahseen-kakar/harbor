@@ -1,0 +1,14 @@
+<?xml version="1.0" standalone="yes"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
+        <title>Harbor</title>
+        <item>
+            <title>1.1</title>
+            <pubDate>Sat, 14 Mar 2026 03:29:33 +0500</pubDate>
+            <sparkle:version>3</sparkle:version>
+            <sparkle:shortVersionString>1.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.6</sparkle:minimumSystemVersion>
+            <enclosure url="https://tahseen-kakar.github.io/harbor/Harbor-1.1.dmg" length="6915664" type="application/octet-stream" sparkle:edSignature="zu69DvZxtRnUYpZHIWzQouOBWHvv2HbrMsgFYG1knz1LdAnrR5IDWlf3sTDhqirfqGnvzS6UY2SXH62mByZCAQ=="/>
+        </item>
+    </channel>
+</rss>
