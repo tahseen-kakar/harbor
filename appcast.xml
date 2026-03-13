@@ -9,6 +9,9 @@
             <sparkle:shortVersionString>1.1</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>15.6</sparkle:minimumSystemVersion>
             <enclosure url="https://tahseen-kakar.github.io/harbor/Harbor-1.1.dmg" length="6915664" type="application/octet-stream" sparkle:edSignature="zu69DvZxtRnUYpZHIWzQouOBWHvv2HbrMsgFYG1knz1LdAnrR5IDWlf3sTDhqirfqGnvzS6UY2SXH62mByZCAQ=="/>
+            <sparkle:deltas>
+                <enclosure url="https://tahseen-kakar.github.io/harbor/Harbor3-1.delta" sparkle:deltaFrom="1" length="86286" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977840" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="QP+CsiDvc2BzkowSBC0NVR5hG7ThuumVYo1PIDcNh0Jhrm8vf6BXTZqcyCH26ZF+vvBQuI31/mSibKJBAc/VBQ=="/>
+            </sparkle:deltas>
         </item>
     </channel>
 </rss>
