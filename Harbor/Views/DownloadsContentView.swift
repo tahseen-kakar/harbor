@@ -19,7 +19,7 @@ struct DownloadsContentView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                Table(center.filteredDownloads, selection: $center.selectedDownloadID) {
+                Table(of: DownloadItem.self, selection: $center.selectedDownloadID) {
                     TableColumn("Name") { item in
                         HStack(alignment: .top, spacing: 10) {
                             Image(systemName: item.sourceBadgeImage)
@@ -34,9 +34,6 @@ struct DownloadsContentView: View {
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
                             }
-                        }
-                        .contextMenu {
-                            rowContextMenu(for: item)
                         }
                     }
 
@@ -79,6 +76,13 @@ struct DownloadsContentView: View {
                     TableColumn("Updated") { item in
                         Text(DownloadFormatting.dateString(item.updatedAt))
                             .font(.caption)
+                    }
+                } rows: {
+                    ForEach(center.filteredDownloads) { item in
+                        TableRow(item)
+                            .contextMenu {
+                                rowContextMenu(for: item)
+                            }
                     }
                 }
             }
@@ -133,6 +137,12 @@ struct DownloadsContentView: View {
         if item.status == .failed || item.status == .cancelled {
             Button("Retry") {
                 center.retryDownload(id: item.id)
+            }
+        }
+
+        if item.fileLocationURL != nil {
+            Button("Open File") {
+                center.openDownload(id: item.id)
             }
         }
 
