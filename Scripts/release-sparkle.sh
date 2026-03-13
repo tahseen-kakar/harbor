@@ -14,7 +14,7 @@ PAGES_BRANCH="${PAGES_BRANCH:-gh-pages}"
 PAGES_REMOTE="${PAGES_REMOTE:-origin}"
 UPDATES_SUBDIR="${UPDATES_SUBDIR:-updates}"
 SPARKLE_BIN_DIR="${SPARKLE_BIN_DIR:-}"
-DOWNLOAD_URL_PREFIX="${DOWNLOAD_URL_PREFIX:-https://tahseen-kakar.github.io/harbor/$UPDATES_SUBDIR}"
+DOWNLOAD_URL_PREFIX="${DOWNLOAD_URL_PREFIX:-https://tahseen-kakar.github.io/harbor/$UPDATES_SUBDIR/}"
 PUBLIC_FEED_URL="${PUBLIC_FEED_URL:-https://tahseen-kakar.github.io/harbor/appcast.xml}"
 
 if [ ! -d "$APP_PATH" ]; then
@@ -31,6 +31,11 @@ if [ -z "$SPARKLE_BIN_DIR" ] || [ ! -x "$SPARKLE_BIN_DIR/generate_appcast" ]; th
   echo "Sparkle tools not found. Set SPARKLE_BIN_DIR to the directory containing generate_appcast and generate_keys." >&2
   exit 1
 fi
+
+case "$DOWNLOAD_URL_PREFIX" in
+  */) ;;
+  *) DOWNLOAD_URL_PREFIX="$DOWNLOAD_URL_PREFIX/" ;;
+esac
 
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Contents/Info.plist" 2>/dev/null || true)"
 BUILD_NUMBER="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Contents/Info.plist" 2>/dev/null || true)"
