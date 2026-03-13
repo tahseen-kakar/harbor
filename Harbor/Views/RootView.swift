@@ -10,12 +10,19 @@ struct RootView: View {
         NavigationSplitView {
             SidebarView(center: center)
                 .frame(minWidth: 220, idealWidth: 240)
-        } content: {
-            DownloadsContentView(center: center)
-                .frame(minWidth: 560)
         } detail: {
-            DownloadDetailView(center: center)
-                .frame(minWidth: 320, idealWidth: 360)
+            if center.selectedDownload != nil {
+                HSplitView {
+                    DownloadsContentView(center: center)
+                        .frame(minWidth: 560, maxWidth: .infinity, maxHeight: .infinity)
+
+                    DownloadDetailView(center: center)
+                        .frame(minWidth: 320, idealWidth: 360, maxWidth: 420, maxHeight: .infinity)
+                }
+            } else {
+                DownloadsContentView(center: center)
+                    .frame(minWidth: 560, maxWidth: .infinity, maxHeight: .infinity)
+            }
         }
         .navigationSplitViewStyle(.balanced)
         .searchable(text: $center.searchText, placement: .toolbar, prompt: "Search downloads")

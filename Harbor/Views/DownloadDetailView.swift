@@ -22,7 +22,6 @@ struct DownloadDetailView: View {
                     }
                     .padding(24)
                 }
-                .background(detailPaneBackground)
                 .navigationTitle(item.displayName)
             } else {
                 ContentUnavailableView {
@@ -38,7 +37,7 @@ struct DownloadDetailView: View {
                         center.presentAddSheet()
                     }
                 }
-                .background(detailPaneBackground)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
     }
@@ -376,17 +375,6 @@ struct DownloadDetailView: View {
                         .strokeBorder(.white.opacity(0.35))
                 }
         }
-    }
-
-    private var detailPaneBackground: some View {
-        Rectangle()
-            .fill(Color(nsColor: .windowBackgroundColor))
-            .overlay(alignment: .leading) {
-                Rectangle()
-                    .fill(Color(nsColor: .windowBackgroundColor))
-                    .frame(width: 2)
-            }
-            .ignoresSafeArea()
     }
 
     private func primaryActionButton(
