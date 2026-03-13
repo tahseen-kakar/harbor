@@ -462,6 +462,8 @@ final class DownloadCenter {
             return
         }
 
+        let hadBackendIdentifier = currentItem.backendIdentifier != nil
+
         do {
             if let backendIdentifier = currentItem.backendIdentifier {
                 try await torrentService.unpause(gid: backendIdentifier)
@@ -487,6 +489,16 @@ final class DownloadCenter {
             schedulePersist()
         } catch {
             guard let refreshedItem = item(for: id) else {
+                return
+            }
+
+            if hadBackendIdentifier, isTransientTorrentEngineError(error) {
+                refreshedItem.status = .paused
+                refreshedItem.speedBytesPerSecond = 0
+                refreshedItem.uploadBytesPerSecond = 0
+                refreshedItem.updatedAt = .now
+                refreshedItem.lastError = error.localizedDescription
+                schedulePersist()
                 return
             }
 
@@ -581,6 +593,15 @@ final class DownloadCenter {
                 apply(snapshot: snapshot, to: item)
                 didMutate = true
             } catch {
+                if isTransientTorrentEngineError(error) {
+                    item.speedBytesPerSecond = 0
+                    item.uploadBytesPerSecond = 0
+                    item.updatedAt = .now
+                    item.lastError = error.localizedDescription
+                    didMutate = true
+                    continue
+                }
+
                 item.status = .failed
                 item.backendIdentifier = nil
                 item.speedBytesPerSecond = 0
@@ -797,9 +818,34 @@ final class DownloadCenter {
         }
 
         activeAlert = UserAlert(
-            title: "Torrent Support Needs aria2",
+            title: torrentErrorTitle(for: error),
             message: error.localizedDescription
         )
+    }
+
+    private func isTransientTorrentEngineError(_ error: Error) -> Bool {
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .timedOut, .cannotConnectToHost, .cannotFindHost, .networkConnectionLost, .notConnectedToInternet:
+                return true
+            default:
+                break
+            }
+        }
+
+        if case let TorrentEngineError.startupFailed(message) = error {
+            return message.localizedCaseInsensitiveContains("timed out")
+        }
+
+        return false
+    }
+
+    private func torrentErrorTitle(for error: Error) -> String {
+        if case TorrentEngineError.binaryNotFound = error {
+            return "Torrent Support Needs aria2"
+        }
+
+        return "Torrent Engine Error"
     }
 
     private func schedulePersist() {
