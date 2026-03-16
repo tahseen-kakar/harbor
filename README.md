@@ -1,6 +1,4 @@
-<p align="center">
-  <img src=".github/assets/logo-rounded.png" alt="Harbor logo" width="112" />
-</p>
+<img src=".github/assets/logo-rounded.png" alt="Harbor logo" width="112" />
 
 # Harbor
 
