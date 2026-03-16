@@ -1,3 +1,7 @@
+<p align="center">
+  <img src=".github/assets/logo-rounded.png" alt="Harbor logo" width="112" />
+</p>
+
 # Harbor
 
 [![Latest Release](https://img.shields.io/github/v/release/tahseen-kakar/harbor?display_name=tag&label=release)](https://github.com/tahseen-kakar/harbor/releases/latest)
@@ -11,7 +15,9 @@ It is free, local-first, privacy-friendly, and designed to feel like a proper Ma
 
 [Download the latest DMG](https://github.com/tahseen-kakar/harbor/releases/latest)
 
-![Harbor screenshot](.github/assets/harbor-screenshot.png)
+<p align="center">
+  <img src=".github/assets/harbor-screenshot-rounded.png" alt="Harbor screenshot" />
+</p>
 
 ## Why Harbor
 
