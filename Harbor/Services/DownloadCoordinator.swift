@@ -5,7 +5,13 @@ enum DownloadEvent: Sendable {
     case progress(id: UUID, bytesWritten: Int64, expectedBytes: Int64, speedBytesPerSecond: Double)
     case paused(id: UUID, resumeData: Data?)
     case cancelled(id: UUID)
-    case finished(id: UUID, temporaryURL: URL, suggestedFilename: String?)
+    case finished(
+        id: UUID,
+        temporaryURL: URL,
+        suggestedFilename: String?,
+        responseMimeType: String?,
+        statusCode: Int?
+    )
     case failed(id: UUID, message: String, resumeData: Data?)
 }
 
@@ -25,7 +31,9 @@ final class DownloadCoordinator: NSObject, @unchecked Sendable {
     }
 
     private let eventHandler: EventHandler
+    private let fileManager: FileManager
     private let stateLock = NSLock()
+    private let ownedTemporaryDirectory: URL
 
     private var contexts: [Int: TaskContext] = [:]
     private var taskIdentifiersByDownloadID: [UUID: Int] = [:]
@@ -49,8 +57,11 @@ final class DownloadCoordinator: NSObject, @unchecked Sendable {
         )
     }()
 
-    init(eventHandler: @escaping EventHandler) {
+    init(eventHandler: @escaping EventHandler, fileManager: FileManager = .default) {
         self.eventHandler = eventHandler
+        self.fileManager = fileManager
+        self.ownedTemporaryDirectory = fileManager.temporaryDirectory
+            .appendingPathComponent("HarborDownloads", isDirectory: true)
         super.init()
     }
 
@@ -166,6 +177,27 @@ final class DownloadCoordinator: NSObject, @unchecked Sendable {
         defer { stateLock.unlock() }
         return work()
     }
+
+    private func claimTemporaryDownload(
+        at location: URL,
+        downloadID: UUID
+    ) throws -> URL {
+        try fileManager.createDirectory(
+            at: ownedTemporaryDirectory,
+            withIntermediateDirectories: true
+        )
+
+        let claimedURL = ownedTemporaryDirectory
+            .appendingPathComponent(downloadID.uuidString)
+            .appendingPathExtension("download")
+
+        if fileManager.fileExists(atPath: claimedURL.path) {
+            try fileManager.removeItem(at: claimedURL)
+        }
+
+        try fileManager.moveItem(at: location, to: claimedURL)
+        return claimedURL
+    }
 }
 
 extension DownloadCoordinator: URLSessionDownloadDelegate, URLSessionTaskDelegate {
@@ -213,13 +245,30 @@ extension DownloadCoordinator: URLSessionDownloadDelegate, URLSessionTaskDelegat
             return
         }
 
-        eventHandler(
-            .finished(
-                id: context.downloadID,
-                temporaryURL: location,
-                suggestedFilename: downloadTask.response?.suggestedFilename
+        do {
+            let claimedURL = try claimTemporaryDownload(
+                at: location,
+                downloadID: context.downloadID
             )
-        )
+
+            eventHandler(
+                .finished(
+                    id: context.downloadID,
+                    temporaryURL: claimedURL,
+                    suggestedFilename: downloadTask.response?.suggestedFilename,
+                    responseMimeType: downloadTask.response?.mimeType,
+                    statusCode: (downloadTask.response as? HTTPURLResponse)?.statusCode
+                )
+            )
+        } catch {
+            eventHandler(
+                .failed(
+                    id: context.downloadID,
+                    message: error.localizedDescription,
+                    resumeData: nil
+                )
+            )
+        }
     }
 
     func urlSession(

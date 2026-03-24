@@ -749,12 +749,20 @@ final class DownloadCenter {
             item.updatedAt = .now
             startNextQueuedDownloadsIfNeeded()
 
-        case let .finished(id, temporaryURL, suggestedFilename):
+        case let .finished(id, temporaryURL, suggestedFilename, responseMimeType, statusCode):
             guard let item = item(for: id) else {
                 return
             }
 
             do {
+                try validateDownloadedPayload(
+                    for: item,
+                    temporaryURL: temporaryURL,
+                    suggestedFilename: suggestedFilename,
+                    responseMimeType: responseMimeType,
+                    statusCode: statusCode
+                )
+
                 let destinationURL = try destinationResolver.moveDownloadedFile(
                     from: temporaryURL,
                     customFilename: item.preferredFilename,
@@ -775,6 +783,7 @@ final class DownloadCenter {
             } catch {
                 item.status = .failed
                 item.lastError = error.localizedDescription
+                try? FileManager.default.removeItem(at: temporaryURL)
             }
 
             item.taskIdentifier = nil
@@ -789,6 +798,91 @@ final class DownloadCenter {
 
     private func item(for id: UUID) -> DownloadItem? {
         downloads.first { $0.id == id }
+    }
+
+    private func validateDownloadedPayload(
+        for item: DownloadItem,
+        temporaryURL: URL,
+        suggestedFilename: String?,
+        responseMimeType: String?,
+        statusCode: Int?
+    ) throws {
+        guard item.backend == .urlSession else {
+            return
+        }
+
+        if let statusCode, (200 ... 299).contains(statusCode) == false {
+            throw NSError(
+                domain: "HarborDownloadValidation",
+                code: statusCode,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "The server returned HTTP \(statusCode) instead of a downloadable file."
+                ]
+            )
+        }
+
+        guard shouldAllowHTMLDownload(for: item, suggestedFilename: suggestedFilename) == false else {
+            return
+        }
+
+        let normalizedMimeType = responseMimeType?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+
+        let isHTMLMimeType = normalizedMimeType == "text/html"
+            || normalizedMimeType == "application/xhtml+xml"
+
+        if isHTMLMimeType || payloadLooksLikeHTML(at: temporaryURL) {
+            throw NSError(
+                domain: "HarborDownloadValidation",
+                code: 0,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "This link returned a web page instead of a file. The site may be blocking automated downloads or requiring a browser session."
+                ]
+            )
+        }
+    }
+
+    private func shouldAllowHTMLDownload(
+        for item: DownloadItem,
+        suggestedFilename: String?
+    ) -> Bool {
+        let extensions = [
+            item.preferredFilename.flatMap {
+                let pathExtension = URL(fileURLWithPath: $0).pathExtension
+                return pathExtension.isEmpty ? nil : pathExtension
+            },
+            suggestedFilename.flatMap {
+                let pathExtension = URL(fileURLWithPath: $0).pathExtension
+                return pathExtension.isEmpty ? nil : pathExtension
+            },
+            item.sourceURL.pathExtension.isEmpty ? nil : item.sourceURL.pathExtension
+        ]
+            .compactMap { $0?.lowercased() }
+
+        return extensions.contains("html") || extensions.contains("htm")
+    }
+
+    private func payloadLooksLikeHTML(at url: URL) -> Bool {
+        guard let handle = try? FileHandle(forReadingFrom: url) else {
+            return false
+        }
+
+        defer {
+            try? handle.close()
+        }
+
+        guard let data = try? handle.read(upToCount: 1024),
+              let sample = String(data: data, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+        else {
+            return false
+        }
+
+        return sample.hasPrefix("<!doctype html")
+            || sample.hasPrefix("<html")
+            || sample.contains("<html")
     }
 
     private func cleanupBackendIdentifiers(for items: [DownloadItem]) {
