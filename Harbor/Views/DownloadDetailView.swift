@@ -16,6 +16,10 @@ struct DownloadDetailView: View {
                         overviewCard(for: item)
                         storageCard(for: item)
 
+                        if item.status == .browserSessionRequired {
+                            browserSessionCard(message: item.lastError)
+                        }
+
                         if let message = item.lastError, item.status == .failed {
                             errorCard(message: message)
                         }
@@ -103,9 +107,12 @@ struct DownloadDetailView: View {
                 if let progressValue = item.progressValue {
                     ProgressView(value: progressValue, total: 1)
                         .tint(progressTint(for: item))
-                } else {
+                } else if item.status == .preparing || item.status == .downloading {
                     ProgressView()
                         .controlSize(.small)
+                } else {
+                    ProgressView(value: item.progress, total: 1)
+                        .tint(progressTint(for: item))
                 }
             }
 
@@ -183,6 +190,23 @@ struct DownloadDetailView: View {
         }
     }
 
+    private func browserSessionCard(message: String?) -> some View {
+        inspectorCard {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "globe")
+                    .foregroundStyle(.mint)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Browser Session Required")
+                        .font(.headline)
+
+                    Text(message ?? "This site requires a browser session before Harbor can download the file.")
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
     @ViewBuilder
     private func actionBar(for item: DownloadItem) -> some View {
         ViewThatFits {
@@ -205,14 +229,24 @@ struct DownloadDetailView: View {
 
     @ViewBuilder
     private func primaryTransportAction(for item: DownloadItem) -> some View {
-        let isPause = item.canPause
+        if item.status == .browserSessionRequired {
+            primaryActionButton(
+                title: "Continue in Harbor",
+                systemImage: "globe",
+                isProminent: true
+            ) {
+                center.continueInBrowser(id: item.id)
+            }
+        } else {
+            let isPause = item.canPause
 
-        primaryActionButton(
-            title: isPause ? "Pause" : "Resume",
-            systemImage: isPause ? "pause.fill" : "play.fill",
-            isProminent: true
-        ) {
-            center.togglePauseResume(id: item.id)
+            primaryActionButton(
+                title: isPause ? "Pause" : "Resume",
+                systemImage: isPause ? "pause.fill" : "play.fill",
+                isProminent: true
+            ) {
+                center.togglePauseResume(id: item.id)
+            }
         }
     }
 
@@ -320,6 +354,8 @@ struct DownloadDetailView: View {
         switch item.status {
         case .downloading:
             .blue
+        case .browserSessionRequired:
+            .mint
         case .paused:
             .yellow
         case .completed:

@@ -34,7 +34,7 @@ enum DownloadFilter: String, CaseIterable, Identifiable, Hashable {
         case .active:
             "Running and queued transfers"
         case .paused:
-            "Ready to resume"
+            "Ready to resume or continue in browser"
         case .completed:
             "Saved successfully"
         case .failed:
@@ -69,7 +69,7 @@ enum DownloadFilter: String, CaseIterable, Identifiable, Hashable {
         case .active:
             item.status == .queued || item.status == .preparing || item.status == .downloading
         case .paused:
-            item.status == .paused
+            item.status == .paused || item.status == .browserSessionRequired
         case .completed:
             item.status == .completed
         case .failed:

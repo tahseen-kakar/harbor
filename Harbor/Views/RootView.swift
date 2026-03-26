@@ -31,6 +31,20 @@ struct RootView: View {
                 center.queueDownload(request)
             }
         }
+        .sheet(
+            isPresented: Binding(
+                get: { center.activeBrowserSession != nil },
+                set: { isPresented in
+                    if isPresented == false {
+                        center.dismissBrowserSession()
+                    }
+                }
+            )
+        ) {
+            if let session = center.activeBrowserSession {
+                BrowserDownloadSheet(center: center, session: session)
+            }
+        }
         .alert(
             center.activeAlert?.title ?? "Alert",
             isPresented: Binding(

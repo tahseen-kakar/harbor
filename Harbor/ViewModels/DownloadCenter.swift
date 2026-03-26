@@ -9,6 +9,7 @@ final class DownloadCenter {
     @ObservationIgnored private let persistence: DownloadPersistence
     @ObservationIgnored private let destinationResolver: DownloadDestinationResolver
     @ObservationIgnored private var coordinator: DownloadCoordinator! = nil
+    @ObservationIgnored private var browserCoordinator: BrowserDownloadCoordinator! = nil
     @ObservationIgnored private let torrentService: Aria2TorrentService
     @ObservationIgnored private var hasLoaded = false
     @ObservationIgnored private var persistTask: Task<Void, Never>?
@@ -21,6 +22,7 @@ final class DownloadCenter {
     var searchText = ""
     var sortMode: DownloadSortMode = .newest
     var isPresentingAddSheet = false
+    var activeBrowserSession: BrowserDownloadSession?
     var activeAlert: UserAlert?
 
     init(
@@ -34,6 +36,11 @@ final class DownloadCenter {
         self.destinationResolver = destinationResolver
         self.torrentService = torrentService
         self.coordinator = DownloadCoordinator { [weak self] event in
+            Task { @MainActor [weak self] in
+                self?.handle(event)
+            }
+        }
+        self.browserCoordinator = BrowserDownloadCoordinator { [weak self] event in
             Task { @MainActor [weak self] in
                 self?.handle(event)
             }
@@ -214,6 +221,11 @@ final class DownloadCenter {
             return
         }
 
+        if item.status == .browserSessionRequired {
+            continueInBrowser(id: id)
+            return
+        }
+
         if item.canPause {
             pauseDownload(id: id)
         } else if item.canResume {
@@ -297,6 +309,10 @@ final class DownloadCenter {
             return
         }
 
+        if activeBrowserSession?.downloadID == id {
+            dismissBrowserSession()
+        }
+
         switch item.backend {
         case .urlSession:
             if item.taskIdentifier != nil {
@@ -330,6 +346,10 @@ final class DownloadCenter {
     func removeDownload(id: UUID) {
         guard let item = item(for: id) else {
             return
+        }
+
+        if activeBrowserSession?.downloadID == id {
+            dismissBrowserSession()
         }
 
         if item.backend == .urlSession, item.taskIdentifier != nil {
@@ -412,6 +432,37 @@ final class DownloadCenter {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(sourceText, forType: .string)
+    }
+
+    func continueInBrowser(id: UUID) {
+        guard let item = item(for: id),
+              item.sourceKind == .directURL
+        else {
+            return
+        }
+
+        if let activeBrowserSession, activeBrowserSession.downloadID != id {
+            activeAlert = UserAlert(
+                title: "Browser Session Already Open",
+                message: "Finish the current browser-assisted download before starting another one."
+            )
+            return
+        }
+
+        let session = browserCoordinator.startSession(
+            downloadID: item.id,
+            sourceURL: item.sourceURL,
+            displayName: item.displayName
+        )
+
+        activeBrowserSession = session
+        item.updatedAt = .now
+        schedulePersist()
+    }
+
+    func dismissBrowserSession() {
+        browserCoordinator.cancelSession()
+        activeBrowserSession = nil
     }
 
     private func startOrQueueDownload(id: UUID) {
@@ -755,31 +806,23 @@ final class DownloadCenter {
             }
 
             do {
-                try validateDownloadedPayload(
+                try finalizeFileDownload(
                     for: item,
                     temporaryURL: temporaryURL,
                     suggestedFilename: suggestedFilename,
                     responseMimeType: responseMimeType,
                     statusCode: statusCode
                 )
-
-                let destinationURL = try destinationResolver.moveDownloadedFile(
-                    from: temporaryURL,
-                    customFilename: item.preferredFilename,
-                    responseSuggestedFilename: suggestedFilename,
-                    sourceURL: item.sourceURL,
-                    into: item.destinationFolderURL
-                )
-
-                item.fileLocationPath = destinationURL.path
-                item.preferredFilename = destinationURL.lastPathComponent
-                item.status = .completed
-                item.progress = 1
-                item.expectedBytes = max(item.expectedBytes, item.bytesWritten)
-                item.bytesWritten = max(item.bytesWritten, item.expectedBytes)
-                item.finishedAt = .now
-                item.lastError = nil
-                item.resumeData = nil
+            } catch let error as DirectDownloadValidationError {
+                switch error {
+                case let .browserSessionRequired(message):
+                    markBrowserSessionRequired(item, message: message)
+                    try? FileManager.default.removeItem(at: temporaryURL)
+                case .invalidResponse:
+                    item.status = .failed
+                    item.lastError = error.localizedDescription
+                    try? FileManager.default.removeItem(at: temporaryURL)
+                }
             } catch {
                 item.status = .failed
                 item.lastError = error.localizedDescription
@@ -796,8 +839,122 @@ final class DownloadCenter {
         schedulePersist()
     }
 
+    private func handle(_ event: BrowserDownloadEvent) {
+        switch event {
+        case let .started(id, _, expectedBytes, _, _):
+            guard let item = item(for: id) else {
+                return
+            }
+
+            activeBrowserSession = nil
+            item.status = .downloading
+            item.progress = 0
+            item.bytesWritten = 0
+            if expectedBytes > 0 {
+                item.expectedBytes = max(item.expectedBytes, expectedBytes)
+            }
+            item.lastError = nil
+            item.resumeData = nil
+            item.speedBytesPerSecond = 0
+            item.uploadBytesPerSecond = 0
+            item.updatedAt = .now
+            item.startedAt = item.startedAt ?? .now
+
+        case let .finished(id, temporaryURL, suggestedFilename, responseMimeType, statusCode, expectedBytes):
+            guard let item = item(for: id) else {
+                return
+            }
+
+            do {
+                try finalizeFileDownload(
+                    for: item,
+                    temporaryURL: temporaryURL,
+                    suggestedFilename: suggestedFilename,
+                    responseMimeType: responseMimeType,
+                    statusCode: statusCode,
+                    expectedBytesOverride: expectedBytes
+                )
+            } catch {
+                item.status = .failed
+                item.lastError = error.localizedDescription
+                try? FileManager.default.removeItem(at: temporaryURL)
+            }
+
+            item.speedBytesPerSecond = 0
+            item.uploadBytesPerSecond = 0
+            item.updatedAt = .now
+            startNextQueuedDownloadsIfNeeded()
+
+        case let .failed(id, message):
+            activeBrowserSession = nil
+
+            guard let item = item(for: id) else {
+                return
+            }
+
+            item.status = .failed
+            item.lastError = message
+            item.speedBytesPerSecond = 0
+            item.uploadBytesPerSecond = 0
+            item.updatedAt = .now
+            startNextQueuedDownloadsIfNeeded()
+        }
+
+        schedulePersist()
+    }
+
     private func item(for id: UUID) -> DownloadItem? {
         downloads.first { $0.id == id }
+    }
+
+    private func finalizeFileDownload(
+        for item: DownloadItem,
+        temporaryURL: URL,
+        suggestedFilename: String?,
+        responseMimeType: String?,
+        statusCode: Int?,
+        expectedBytesOverride: Int64? = nil
+    ) throws {
+        try validateDownloadedPayload(
+            for: item,
+            temporaryURL: temporaryURL,
+            suggestedFilename: suggestedFilename,
+            responseMimeType: responseMimeType,
+            statusCode: statusCode
+        )
+
+        let destinationURL = try destinationResolver.moveDownloadedFile(
+            from: temporaryURL,
+            customFilename: item.preferredFilename,
+            responseSuggestedFilename: suggestedFilename,
+            sourceURL: item.sourceURL,
+            into: item.destinationFolderURL
+        )
+
+        let expectedBytes = max(item.expectedBytes, expectedBytesOverride ?? 0)
+
+        item.fileLocationPath = destinationURL.path
+        item.preferredFilename = destinationURL.lastPathComponent
+        item.status = .completed
+        item.progress = 1
+        item.expectedBytes = max(expectedBytes, item.bytesWritten)
+        item.bytesWritten = max(item.bytesWritten, item.expectedBytes)
+        item.finishedAt = .now
+        item.lastError = nil
+        item.resumeData = nil
+    }
+
+    private func markBrowserSessionRequired(_ item: DownloadItem, message: String) {
+        item.taskIdentifier = nil
+        item.status = .browserSessionRequired
+        item.progress = 0
+        item.bytesWritten = 0
+        item.expectedBytes = 0
+        item.speedBytesPerSecond = 0
+        item.uploadBytesPerSecond = 0
+        item.lastError = message
+        item.resumeData = nil
+        item.updatedAt = .now
     }
 
     private func validateDownloadedPayload(
@@ -812,12 +969,8 @@ final class DownloadCenter {
         }
 
         if let statusCode, (200 ... 299).contains(statusCode) == false {
-            throw NSError(
-                domain: "HarborDownloadValidation",
-                code: statusCode,
-                userInfo: [
-                    NSLocalizedDescriptionKey: "The server returned HTTP \(statusCode) instead of a downloadable file."
-                ]
+            throw DirectDownloadValidationError.invalidResponse(
+                "The server returned HTTP \(statusCode) instead of a downloadable file."
             )
         }
 
@@ -833,12 +986,8 @@ final class DownloadCenter {
             || normalizedMimeType == "application/xhtml+xml"
 
         if isHTMLMimeType || payloadLooksLikeHTML(at: temporaryURL) {
-            throw NSError(
-                domain: "HarborDownloadValidation",
-                code: 0,
-                userInfo: [
-                    NSLocalizedDescriptionKey: "This link returned a web page instead of a file. The site may be blocking automated downloads or requiring a browser session."
-                ]
+            throw DirectDownloadValidationError.browserSessionRequired(
+                "This site requires a browser session before Harbor can download the file."
             )
         }
     }
@@ -949,6 +1098,18 @@ final class DownloadCenter {
         persistTask = Task { [persistence] in
             try? await Task.sleep(for: .milliseconds(250))
             try? await persistence.save(records)
+        }
+    }
+}
+
+private enum DirectDownloadValidationError: LocalizedError {
+    case invalidResponse(String)
+    case browserSessionRequired(String)
+
+    var errorDescription: String? {
+        switch self {
+        case let .invalidResponse(message), let .browserSessionRequired(message):
+            message
         }
     }
 }

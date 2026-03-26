@@ -118,7 +118,7 @@ struct DownloadsContentView: View {
         case .active:
             "Queued and running transfers appear here."
         case .paused:
-            "Pause a transfer to keep it ready for later."
+            "Paused transfers and browser-required downloads stay here until you continue them."
         case .completed:
             "Finished files will stay listed until you clear them."
         case .failed:
@@ -130,8 +130,14 @@ struct DownloadsContentView: View {
 
     @ViewBuilder
     private func rowContextMenu(for item: DownloadItem) -> some View {
-        Button(item.canPause ? "Pause" : "Resume") {
-            center.togglePauseResume(id: item.id)
+        if item.status == .browserSessionRequired {
+            Button("Continue in Harbor") {
+                center.continueInBrowser(id: item.id)
+            }
+        } else {
+            Button(item.canPause ? "Pause" : "Resume") {
+                center.togglePauseResume(id: item.id)
+            }
         }
 
         if item.status == .failed || item.status == .cancelled {

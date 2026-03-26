@@ -5,6 +5,7 @@ enum DownloadStatus: String, Codable, CaseIterable, Sendable {
     case queued
     case preparing
     case downloading
+    case browserSessionRequired
     case paused
     case completed
     case failed
@@ -18,6 +19,8 @@ enum DownloadStatus: String, Codable, CaseIterable, Sendable {
             "Preparing"
         case .downloading:
             "Downloading"
+        case .browserSessionRequired:
+            "Browser Session Required"
         case .paused:
             "Paused"
         case .completed:
@@ -37,6 +40,8 @@ enum DownloadStatus: String, Codable, CaseIterable, Sendable {
             "ellipsis.circle"
         case .downloading:
             "arrow.down.circle.fill"
+        case .browserSessionRequired:
+            "globe"
         case .paused:
             "pause.circle.fill"
         case .completed:
@@ -52,7 +57,7 @@ enum DownloadStatus: String, Codable, CaseIterable, Sendable {
         switch self {
         case .completed, .failed, .cancelled:
             true
-        case .queued, .preparing, .downloading, .paused:
+        case .queued, .preparing, .downloading, .browserSessionRequired, .paused:
             false
         }
     }
@@ -376,7 +381,16 @@ final class DownloadItem: Identifiable {
     }
 
     var speedText: String {
-        DownloadFormatting.speedString(speedBytesPerSecond)
+        if speedBytesPerSecond > 0 {
+            return DownloadFormatting.speedString(speedBytesPerSecond)
+        }
+
+        switch status {
+        case .queued, .preparing, .downloading:
+            return "Waiting"
+        case .browserSessionRequired, .paused, .completed, .failed, .cancelled:
+            return "-"
+        }
     }
 
     var etaText: String? {
