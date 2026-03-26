@@ -25,7 +25,7 @@ enum DownloadSourceKind: String, Codable, CaseIterable, Identifiable, Sendable {
         case .magnetLink:
             "bolt.horizontal.circle"
         case .torrentFile:
-            "doc.badge.arrow.down"
+            "doc.fill"
         }
     }
 
