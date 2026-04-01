@@ -26,8 +26,10 @@ struct RootView: View {
         }
         .navigationSplitViewStyle(.balanced)
         .searchable(text: $center.searchText, placement: .toolbar, prompt: "Search downloads")
-        .sheet(isPresented: $center.isPresentingAddSheet) {
-            AddDownloadSheet(settings: settings) { request in
+        .sheet(item: $center.addSheetDraft, onDismiss: {
+            center.handleAddSheetDismissal()
+        }) { draft in
+            AddDownloadSheet(settings: settings, draft: draft) { request in
                 center.queueDownload(request)
             }
         }

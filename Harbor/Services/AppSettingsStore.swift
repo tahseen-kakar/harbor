@@ -9,6 +9,7 @@ final class AppSettingsStore {
         static let defaultDestinationPath = "defaultDestinationPath"
         static let maxConcurrentDownloads = "maxConcurrentDownloads"
         static let startDownloadsAutomatically = "startDownloadsAutomatically"
+        static let notificationsEnabled = "notificationsEnabled"
     }
 
     private let userDefaults: UserDefaults
@@ -31,6 +32,12 @@ final class AppSettingsStore {
         }
     }
 
+    var notificationsEnabled: Bool {
+        didSet {
+            userDefaults.set(notificationsEnabled, forKey: Keys.notificationsEnabled)
+        }
+    }
+
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
 
@@ -48,6 +55,12 @@ final class AppSettingsStore {
             self.startDownloadsAutomatically = true
         } else {
             self.startDownloadsAutomatically = userDefaults.bool(forKey: Keys.startDownloadsAutomatically)
+        }
+
+        if userDefaults.object(forKey: Keys.notificationsEnabled) == nil {
+            self.notificationsEnabled = true
+        } else {
+            self.notificationsEnabled = userDefaults.bool(forKey: Keys.notificationsEnabled)
         }
     }
 

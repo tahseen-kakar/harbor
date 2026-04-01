@@ -8,20 +8,23 @@ final class DownloadCenter {
     @ObservationIgnored private let settings: AppSettingsStore
     @ObservationIgnored private let persistence: DownloadPersistence
     @ObservationIgnored private let destinationResolver: DownloadDestinationResolver
+    @ObservationIgnored private let notificationService: DownloadNotificationService
     @ObservationIgnored private var coordinator: DownloadCoordinator! = nil
     @ObservationIgnored private var browserCoordinator: BrowserDownloadCoordinator! = nil
     @ObservationIgnored private let torrentService: Aria2TorrentService
     @ObservationIgnored private var hasLoaded = false
+    @ObservationIgnored private var hasInstalledExternalOpenHandler = false
     @ObservationIgnored private var persistTask: Task<Void, Never>?
     @ObservationIgnored private var torrentRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var hasShownTorrentBinaryAlert = false
+    @ObservationIgnored private var pendingExternalAddSheetDrafts: [AddDownloadSheetDraft] = []
 
     var downloads: [DownloadItem] = []
     var selectedFilter: DownloadFilter = .all
     var selectedDownloadID: UUID?
     var searchText = ""
     var sortMode: DownloadSortMode = .newest
-    var isPresentingAddSheet = false
+    var addSheetDraft: AddDownloadSheetDraft?
     var activeBrowserSession: BrowserDownloadSession?
     var activeAlert: UserAlert?
 
@@ -29,11 +32,13 @@ final class DownloadCenter {
         settings: AppSettingsStore,
         persistence: DownloadPersistence = DownloadPersistence(),
         destinationResolver: DownloadDestinationResolver = DownloadDestinationResolver(),
+        notificationService: DownloadNotificationService = DownloadNotificationService(),
         torrentService: Aria2TorrentService = Aria2TorrentService()
     ) {
         self.settings = settings
         self.persistence = persistence
         self.destinationResolver = destinationResolver
+        self.notificationService = notificationService
         self.torrentService = torrentService
         self.coordinator = DownloadCoordinator { [weak self] event in
             Task { @MainActor [weak self] in
@@ -167,8 +172,41 @@ final class DownloadCenter {
         downloads.filter { filter.includes($0) }.count
     }
 
+    func installExternalOpenHandlerIfNeeded() {
+        guard hasInstalledExternalOpenHandler == false else {
+            return
+        }
+
+        hasInstalledExternalOpenHandler = true
+        ExternalTorrentOpenCoordinator.shared.installHandler { [weak self] urls in
+            self?.handleOpenedTorrentFiles(urls)
+        }
+    }
+
     func presentAddSheet() {
-        isPresentingAddSheet = true
+        guard addSheetDraft == nil else {
+            return
+        }
+
+        addSheetDraft = makeBlankAddSheetDraft()
+    }
+
+    func handleAddSheetDismissal() {
+        addSheetDraft = nil
+        presentNextQueuedExternalAddSheetIfNeeded()
+    }
+
+    private func handleOpenedTorrentFiles(_ urls: [URL]) {
+        let drafts = urls
+            .filter { DownloadSourceKind.detect(from: $0) == .torrentFile }
+            .map { makeExternalTorrentDraft(for: $0) }
+
+        guard drafts.isEmpty == false else {
+            return
+        }
+
+        pendingExternalAddSheetDrafts.append(contentsOf: drafts)
+        presentNextQueuedExternalAddSheetIfNeeded()
     }
 
     func queueDownload(_ request: AddDownloadRequest) {
@@ -199,7 +237,6 @@ final class DownloadCenter {
 
         downloads.insert(item, at: 0)
         selectedDownloadID = item.id
-        isPresentingAddSheet = false
 
         if request.shouldStartImmediately {
             startOrQueueDownload(id: item.id)
@@ -326,11 +363,12 @@ final class DownloadCenter {
             }
         }
 
-        item.status = .cancelled
         item.taskIdentifier = nil
         item.backendIdentifier = nil
         item.speedBytesPerSecond = 0
+        item.uploadBytesPerSecond = 0
         item.updatedAt = .now
+        transitionStatus(for: item, to: .cancelled)
         schedulePersist()
         startNextQueuedDownloadsIfNeeded()
     }
@@ -553,12 +591,12 @@ final class DownloadCenter {
                 return
             }
 
-            refreshedItem.status = .failed
             refreshedItem.backendIdentifier = nil
             refreshedItem.speedBytesPerSecond = 0
             refreshedItem.uploadBytesPerSecond = 0
             refreshedItem.updatedAt = .now
             refreshedItem.lastError = error.localizedDescription
+            transitionStatus(for: refreshedItem, to: .failed)
             presentTorrentErrorIfNeeded(error)
             schedulePersist()
             startNextQueuedDownloadsIfNeeded()
@@ -653,12 +691,12 @@ final class DownloadCenter {
                     continue
                 }
 
-                item.status = .failed
                 item.backendIdentifier = nil
                 item.speedBytesPerSecond = 0
                 item.uploadBytesPerSecond = 0
                 item.updatedAt = .now
                 item.lastError = error.localizedDescription
+                transitionStatus(for: item, to: .failed)
                 didMutate = true
             }
         }
@@ -697,19 +735,18 @@ final class DownloadCenter {
             item.uploadBytesPerSecond = 0
 
         case "error":
-            item.status = .failed
             item.lastError = snapshot.errorMessage ?? "Torrent engine reported an error."
             item.speedBytesPerSecond = 0
             item.uploadBytesPerSecond = 0
             let gid = snapshot.gid
             item.backendIdentifier = nil
+            transitionStatus(for: item, to: .failed)
             Task {
                 await torrentService.remove(gid: gid)
             }
             startNextQueuedDownloadsIfNeeded()
 
         case "complete":
-            item.status = .completed
             item.progress = 1
             item.bytesWritten = max(item.bytesWritten, item.expectedBytes)
             item.finishedAt = item.finishedAt ?? .now
@@ -718,16 +755,17 @@ final class DownloadCenter {
             item.uploadBytesPerSecond = 0
             let gid = snapshot.gid
             item.backendIdentifier = nil
+            transitionStatus(for: item, to: .completed)
             Task {
                 await torrentService.remove(gid: gid)
             }
             startNextQueuedDownloadsIfNeeded()
 
         case "removed":
-            item.status = .cancelled
             item.speedBytesPerSecond = 0
             item.uploadBytesPerSecond = 0
             item.backendIdentifier = nil
+            transitionStatus(for: item, to: .cancelled)
             startNextQueuedDownloadsIfNeeded()
 
         default:
@@ -779,11 +817,11 @@ final class DownloadCenter {
                 return
             }
 
-            item.status = .cancelled
             item.taskIdentifier = nil
             item.speedBytesPerSecond = 0
             item.uploadBytesPerSecond = 0
             item.updatedAt = .now
+            transitionStatus(for: item, to: .cancelled)
             startNextQueuedDownloadsIfNeeded()
 
         case let .failed(id, message, resumeData):
@@ -792,12 +830,12 @@ final class DownloadCenter {
             }
 
             item.taskIdentifier = nil
-            item.status = .failed
             item.lastError = message
             item.resumeData = resumeData
             item.speedBytesPerSecond = 0
             item.uploadBytesPerSecond = 0
             item.updatedAt = .now
+            transitionStatus(for: item, to: .failed)
             startNextQueuedDownloadsIfNeeded()
 
         case let .finished(id, temporaryURL, suggestedFilename, responseMimeType, statusCode):
@@ -819,13 +857,13 @@ final class DownloadCenter {
                     markBrowserSessionRequired(item, message: message)
                     try? FileManager.default.removeItem(at: temporaryURL)
                 case .invalidResponse:
-                    item.status = .failed
                     item.lastError = error.localizedDescription
+                    transitionStatus(for: item, to: .failed)
                     try? FileManager.default.removeItem(at: temporaryURL)
                 }
             } catch {
-                item.status = .failed
                 item.lastError = error.localizedDescription
+                transitionStatus(for: item, to: .failed)
                 try? FileManager.default.removeItem(at: temporaryURL)
             }
 
@@ -875,8 +913,8 @@ final class DownloadCenter {
                     expectedBytesOverride: expectedBytes
                 )
             } catch {
-                item.status = .failed
                 item.lastError = error.localizedDescription
+                transitionStatus(for: item, to: .failed)
                 try? FileManager.default.removeItem(at: temporaryURL)
             }
 
@@ -892,11 +930,11 @@ final class DownloadCenter {
                 return
             }
 
-            item.status = .failed
             item.lastError = message
             item.speedBytesPerSecond = 0
             item.uploadBytesPerSecond = 0
             item.updatedAt = .now
+            transitionStatus(for: item, to: .failed)
             startNextQueuedDownloadsIfNeeded()
         }
 
@@ -935,13 +973,13 @@ final class DownloadCenter {
 
         item.fileLocationPath = destinationURL.path
         item.preferredFilename = destinationURL.lastPathComponent
-        item.status = .completed
         item.progress = 1
         item.expectedBytes = max(expectedBytes, item.bytesWritten)
         item.bytesWritten = max(item.bytesWritten, item.expectedBytes)
         item.finishedAt = .now
         item.lastError = nil
         item.resumeData = nil
+        transitionStatus(for: item, to: .completed)
     }
 
     private func markBrowserSessionRequired(_ item: DownloadItem, message: String) {
@@ -1032,6 +1070,79 @@ final class DownloadCenter {
         return sample.hasPrefix("<!doctype html")
             || sample.hasPrefix("<html")
             || sample.contains("<html")
+    }
+
+    private func presentNextQueuedExternalAddSheetIfNeeded() {
+        guard addSheetDraft == nil,
+              pendingExternalAddSheetDrafts.isEmpty == false
+        else {
+            return
+        }
+
+        addSheetDraft = pendingExternalAddSheetDrafts.removeFirst()
+    }
+
+    private func makeBlankAddSheetDraft() -> AddDownloadSheetDraft {
+        AddDownloadSheetDraft.blank(
+            destinationFolderURL: settings.defaultDestinationURL,
+            shouldStartImmediately: settings.startDownloadsAutomatically
+        )
+    }
+
+    private func makeExternalTorrentDraft(for fileURL: URL) -> AddDownloadSheetDraft {
+        AddDownloadSheetDraft.torrentFile(
+            fileURL,
+            destinationFolderURL: settings.defaultDestinationURL,
+            shouldStartImmediately: settings.startDownloadsAutomatically
+        )
+    }
+
+    private func transitionStatus(
+        for item: DownloadItem,
+        to status: DownloadStatus
+    ) {
+        let previousStatus = item.status
+        item.status = status
+
+        guard previousStatus != status,
+              status == .completed || status == .failed || status == .cancelled,
+              settings.notificationsEnabled,
+              let payload = notificationPayload(for: item, status: status)
+        else {
+            return
+        }
+
+        Task { [notificationService] in
+            await notificationService.deliver(payload)
+        }
+    }
+
+    private func notificationPayload(
+        for item: DownloadItem,
+        status: DownloadStatus
+    ) -> DownloadNotificationPayload? {
+        let title: String
+        let body: String
+
+        switch status {
+        case .completed:
+            title = "Download Finished"
+            body = "\(item.displayName) is ready."
+        case .failed:
+            title = "Download Failed"
+            body = item.lastError ?? "\(item.displayName) couldn't be downloaded."
+        case .cancelled:
+            title = "Download Cancelled"
+            body = "\(item.displayName) was cancelled."
+        case .queued, .preparing, .downloading, .browserSessionRequired, .paused:
+            return nil
+        }
+
+        return DownloadNotificationPayload(
+            identifier: "download-\(item.id.uuidString)-\(UUID().uuidString)",
+            title: title,
+            body: body
+        )
     }
 
     private func cleanupBackendIdentifiers(for items: [DownloadItem]) {

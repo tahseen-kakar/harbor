@@ -2,6 +2,7 @@ import SwiftUI
 
 @main
 struct HarborApp: App {
+    @NSApplicationDelegateAdaptor(HarborAppDelegate.self) private var appDelegate
     @State private var settings: AppSettingsStore
     @State private var center: DownloadCenter
     @StateObject private var updater: AppUpdater
@@ -18,6 +19,7 @@ struct HarborApp: App {
             RootView(center: center, settings: settings)
                 .frame(minWidth: 1_040, minHeight: 680)
                 .task {
+                    center.installExternalOpenHandlerIfNeeded()
                     await center.initializeIfNeeded()
                 }
         }

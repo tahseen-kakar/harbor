@@ -33,6 +33,7 @@ struct SettingsView: View {
                 }
 
                 Toggle("Start downloads immediately", isOn: $settings.startDownloadsAutomatically)
+                Toggle("Send download notifications", isOn: $settings.notificationsEnabled)
             }
 
             Section("Updates") {

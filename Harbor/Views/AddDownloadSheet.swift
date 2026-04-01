@@ -7,31 +7,15 @@ struct AddDownloadSheet: View {
         case filename
     }
 
-    private enum EntryMode: String, CaseIterable, Identifiable {
-        case linkOrMagnet
-        case torrentFile
-
-        var id: String { rawValue }
-
-        var title: String {
-            switch self {
-            case .linkOrMagnet:
-                "Link or Magnet"
-            case .torrentFile:
-                "Torrent File"
-            }
-        }
-    }
-
     let settings: AppSettingsStore
     let onSubmit: @MainActor (AddDownloadRequest) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @FocusState private var focusedField: Field?
 
-    @State private var entryMode: EntryMode = .linkOrMagnet
-    @State private var sourceURLText = ""
-    @State private var customFilename = ""
+    @State private var entryMode: AddDownloadEntryMode
+    @State private var sourceURLText: String
+    @State private var customFilename: String
     @State private var torrentFileURL: URL?
     @State private var destinationPath: String
     @State private var shouldStartImmediately: Bool
@@ -39,12 +23,17 @@ struct AddDownloadSheet: View {
 
     init(
         settings: AppSettingsStore,
+        draft: AddDownloadSheetDraft,
         onSubmit: @escaping @MainActor (AddDownloadRequest) -> Void
     ) {
         self.settings = settings
         self.onSubmit = onSubmit
-        _destinationPath = State(initialValue: settings.defaultDestinationPath)
-        _shouldStartImmediately = State(initialValue: settings.startDownloadsAutomatically)
+        _entryMode = State(initialValue: draft.entryMode)
+        _sourceURLText = State(initialValue: draft.sourceURLText)
+        _customFilename = State(initialValue: draft.customFilename)
+        _torrentFileURL = State(initialValue: draft.torrentFileURL)
+        _destinationPath = State(initialValue: draft.destinationFolderURL.path)
+        _shouldStartImmediately = State(initialValue: draft.shouldStartImmediately)
     }
 
     var body: some View {
@@ -58,7 +47,7 @@ struct AddDownloadSheet: View {
 
             Form {
                 Picker("Source", selection: $entryMode) {
-                    ForEach(EntryMode.allCases) { mode in
+                    ForEach(AddDownloadEntryMode.allCases) { mode in
                         Text(mode.title).tag(mode)
                     }
                 }
@@ -121,12 +110,16 @@ struct AddDownloadSheet: View {
         .padding(24)
         .frame(width: 560)
         .onAppear {
-            focusedField = .sourceURL
+            if entryMode == .linkOrMagnet {
+                focusedField = .sourceURL
+            }
         }
         .onChange(of: entryMode) { _, newMode in
             validationMessage = nil
             if newMode == .linkOrMagnet {
                 focusedField = .sourceURL
+            } else {
+                focusedField = nil
             }
         }
     }
