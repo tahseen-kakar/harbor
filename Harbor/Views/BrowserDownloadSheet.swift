@@ -18,7 +18,7 @@ struct BrowserDownloadSheet: View {
 
             footer
         }
-        .frame(minWidth: 880, minHeight: 640)
+        .frame(minWidth: 760, idealWidth: 960, minHeight: 560, idealHeight: 680)
     }
 
     private var header: some View {

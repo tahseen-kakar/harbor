@@ -4,25 +4,40 @@ struct RootView: View {
     let center: DownloadCenter
     let settings: AppSettingsStore
 
+    private enum Layout {
+        static let sidebarMinWidth: CGFloat = 200
+        static let sidebarIdealWidth: CGFloat = 230
+        static let sidebarMaxWidth: CGFloat = 280
+        static let contentMinWidth: CGFloat = 500
+        static let contentIdealWidth: CGFloat = 680
+        static let inspectorMinWidth: CGFloat = 300
+        static let inspectorIdealWidth: CGFloat = 340
+        static let inspectorMaxWidth: CGFloat = 440
+    }
+
     var body: some View {
         @Bindable var center = center
 
         NavigationSplitView {
             SidebarView(center: center)
-                .frame(minWidth: 220, idealWidth: 240)
+                .navigationSplitViewColumnWidth(
+                    min: Layout.sidebarMinWidth,
+                    ideal: Layout.sidebarIdealWidth,
+                    max: Layout.sidebarMaxWidth
+                )
+        } content: {
+            DownloadsContentView(center: center)
+                .navigationSplitViewColumnWidth(
+                    min: Layout.contentMinWidth,
+                    ideal: Layout.contentIdealWidth
+                )
         } detail: {
-            if center.selectedDownload != nil {
-                HSplitView {
-                    DownloadsContentView(center: center)
-                        .frame(minWidth: 560, maxWidth: .infinity, maxHeight: .infinity)
-
-                    DownloadDetailView(center: center)
-                        .frame(minWidth: 320, idealWidth: 360, maxWidth: 420, maxHeight: .infinity)
-                }
-            } else {
-                DownloadsContentView(center: center)
-                    .frame(minWidth: 560, maxWidth: .infinity, maxHeight: .infinity)
-            }
+            DownloadDetailView(center: center)
+                .navigationSplitViewColumnWidth(
+                    min: Layout.inspectorMinWidth,
+                    ideal: Layout.inspectorIdealWidth,
+                    max: Layout.inspectorMaxWidth
+                )
         }
         .navigationSplitViewStyle(.balanced)
         .searchable(text: $center.searchText, placement: .toolbar, prompt: "Search downloads")
@@ -65,40 +80,53 @@ struct RootView: View {
             Text(center.activeAlert?.message ?? "")
         }
         .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                Button("New Download", systemImage: "plus") {
-                    center.presentAddSheet()
-                }
+            DownloadToolbarContent(center: center)
+        }
+    }
+}
 
-                Button(
-                    center.hasActiveDownloads ? "Pause All" : "Resume All",
-                    systemImage: center.hasActiveDownloads ? "pause.fill" : "play.fill"
-                ) {
-                    if center.hasActiveDownloads {
-                        center.pauseAll()
-                    } else {
-                        center.resumeAll()
-                    }
-                }
+private struct DownloadToolbarContent: ToolbarContent {
+    @Bindable var center: DownloadCenter
 
-                if center.selectedDownload != nil {
-                    Button("Reveal", systemImage: "folder") {
-                        center.revealSelectedInFinder()
-                    }
-                }
+    var body: some ToolbarContent {
+        ToolbarItemGroup(placement: .primaryAction) {
+            Button("New Download", systemImage: "plus") {
+                center.presentAddSheet()
             }
 
-            ToolbarItem {
-                Menu {
-                    Picker("Sort", selection: $center.sortMode) {
-                        ForEach(DownloadSortMode.allCases) { sortMode in
-                            Text(sortMode.title).tag(sortMode)
-                        }
-                    }
-                } label: {
-                    Label("Sort", systemImage: "arrow.up.arrow.down.circle")
+            Button(
+                center.hasActiveDownloads ? "Pause All" : "Resume All",
+                systemImage: center.hasActiveDownloads ? "pause.fill" : "play.fill"
+            ) {
+                if center.hasActiveDownloads {
+                    center.pauseAll()
+                } else {
+                    center.resumeAll()
                 }
             }
+            .disabled(
+                center.hasActiveDownloads
+                    ? center.hasPausableDownloads == false
+                    : center.hasResumableDownloads == false
+            )
+
+            Button("Reveal", systemImage: "folder") {
+                center.revealSelectedInFinder()
+            }
+            .disabled(center.selectedDownload == nil)
+        }
+
+        ToolbarItem {
+            Menu {
+                Picker("Sort", selection: $center.sortMode) {
+                    ForEach(DownloadSortMode.allCases) { sortMode in
+                        Text(sortMode.title).tag(sortMode)
+                    }
+                }
+            } label: {
+                Label("Sort", systemImage: "arrow.up.arrow.down.circle")
+            }
+            .disabled(center.downloads.isEmpty)
         }
     }
 }

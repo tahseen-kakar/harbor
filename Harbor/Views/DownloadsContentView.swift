@@ -8,33 +8,11 @@ struct DownloadsContentView: View {
 
         VStack(spacing: 0) {
             if center.filteredDownloads.isEmpty {
-                ContentUnavailableView {
-                    Label(emptyTitle, systemImage: emptyImage)
-                } description: {
-                    Text(emptyDescription)
-                } actions: {
-                    Button("Add Download") {
-                        center.presentAddSheet()
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                emptyState
             } else {
                 Table(of: DownloadItem.self, selection: $center.selectedDownloadID) {
                     TableColumn("Name") { item in
-                        HStack(alignment: .top, spacing: 10) {
-                            Image(systemName: item.sourceBadgeImage)
-                                .foregroundStyle(.secondary)
-
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(item.displayName)
-                                    .fontWeight(.medium)
-                                    .lineLimit(1)
-                                Text(item.sourceDisplayText)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-                        }
+                        DownloadNameCell(item: item)
                     }
 
                     TableColumn("Status") { item in
@@ -42,35 +20,16 @@ struct DownloadsContentView: View {
                     }
 
                     TableColumn("Transfer") { item in
-                        VStack(alignment: .leading, spacing: 4) {
-                            if let progressValue = item.progressValue {
-                                ProgressView(value: progressValue, total: 1)
-                                    .progressViewStyle(.linear)
-                            } else if item.status == .downloading || item.status == .preparing {
-                                ProgressView()
-                                    .controlSize(.small)
-                            } else {
-                                ProgressView(value: item.progress, total: 1)
-                                    .progressViewStyle(.linear)
-                            }
-
-                            Text(item.progressText)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+                        DownloadTransferCell(item: item)
                     }
 
                     TableColumn("Source") { item in
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(item.sourceBadgeTitle)
-                            Text(item.sourceHost)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+                        DownloadSourceCell(item: item)
                     }
 
                     TableColumn("Speed") { item in
                         Text(item.speedText)
+                            .monospacedDigit()
                     }
 
                     TableColumn("Updated") { item in
@@ -88,6 +47,19 @@ struct DownloadsContentView: View {
             }
         }
         .navigationTitle(center.selectedFilter.title)
+    }
+
+    private var emptyState: some View {
+        ContentUnavailableView {
+            Label(emptyTitle, systemImage: emptyImage)
+        } description: {
+            Text(emptyDescription)
+        } actions: {
+            Button("Add Download") {
+                center.presentAddSheet()
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var emptyTitle: String {
@@ -169,6 +141,74 @@ struct DownloadsContentView: View {
 
         Button("Remove from List", role: .destructive) {
             center.removeDownload(id: item.id)
+        }
+    }
+}
+
+private struct DownloadNameCell: View {
+    let item: DownloadItem
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: item.sourceBadgeImage)
+                .foregroundStyle(.secondary)
+                .frame(width: 16)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(item.displayName)
+                    .fontWeight(.medium)
+                    .lineLimit(1)
+
+                Text(item.sourceDisplayText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+    }
+}
+
+private struct DownloadTransferCell: View {
+    let item: DownloadItem
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            progressView
+
+            Text(item.progressText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+        }
+    }
+
+    @ViewBuilder
+    private var progressView: some View {
+        if let progressValue = item.progressValue {
+            ProgressView(value: progressValue, total: 1)
+                .progressViewStyle(.linear)
+        } else if item.status == .downloading || item.status == .preparing {
+            ProgressView()
+                .controlSize(.small)
+        } else {
+            ProgressView(value: item.progress, total: 1)
+                .progressViewStyle(.linear)
+        }
+    }
+}
+
+private struct DownloadSourceCell: View {
+    let item: DownloadItem
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(item.sourceBadgeTitle)
+                .lineLimit(1)
+
+            Text(item.sourceHost)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
         }
     }
 }

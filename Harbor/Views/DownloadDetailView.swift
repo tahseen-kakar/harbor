@@ -4,8 +4,7 @@ struct DownloadDetailView: View {
     let center: DownloadCenter
 
     private let metricColumns = [
-        GridItem(.flexible(minimum: 120), spacing: 12),
-        GridItem(.flexible(minimum: 120), spacing: 12)
+        GridItem(.adaptive(minimum: 112), spacing: 12)
     ]
 
     var body: some View {
@@ -48,47 +47,7 @@ struct DownloadDetailView: View {
 
     private func overviewCard(for item: DownloadItem) -> some View {
         inspectorCard {
-            HStack(alignment: .top, spacing: 16) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(.quaternary.opacity(0.55))
-
-                    Image(systemName: item.sourceBadgeImage)
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
-                .frame(width: 46, height: 46)
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(item.displayName)
-                        .font(.title2.weight(.semibold))
-                        .lineLimit(3)
-
-                    HStack(spacing: 8) {
-                        Label(item.sourceBadgeTitle, systemImage: item.sourceBadgeImage)
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(.secondary)
-
-                        if let summary = sourceSummary(for: item) {
-                            Text(summary)
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
-                        }
-                    }
-
-                    if let sourceLine = sourceLine(for: item) {
-                        Text(sourceLine)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                            .textSelection(.enabled)
-                    }
-                }
-
-                Spacer(minLength: 16)
-
-                DownloadStatusBadge(status: item.status)
-            }
+            overviewHeader(for: item)
 
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
@@ -149,6 +108,68 @@ struct DownloadDetailView: View {
             actionBar(for: item)
 
             activityFootnote(for: item)
+        }
+    }
+
+    private func overviewHeader(for item: DownloadItem) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 16) {
+                sourceIcon(for: item)
+                overviewTitleBlock(for: item)
+                Spacer(minLength: 16)
+                DownloadStatusBadge(status: item.status)
+            }
+
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 12) {
+                    sourceIcon(for: item)
+                    overviewTitleBlock(for: item)
+                }
+
+                DownloadStatusBadge(status: item.status)
+            }
+        }
+    }
+
+    private func sourceIcon(for item: DownloadItem) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(.quaternary.opacity(0.55))
+
+            Image(systemName: item.sourceBadgeImage)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.secondary)
+        }
+        .frame(width: 46, height: 46)
+    }
+
+    private func overviewTitleBlock(for item: DownloadItem) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(item.displayName)
+                .font(.title2.weight(.semibold))
+                .lineLimit(3)
+
+            HStack(spacing: 8) {
+                Label(item.sourceBadgeTitle, systemImage: item.sourceBadgeImage)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+
+                if let summary = sourceSummary(for: item) {
+                    Text(summary)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
+            }
+
+            if let sourceLine = sourceLine(for: item) {
+                Text(sourceLine)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .textSelection(.enabled)
+            }
         }
     }
 
@@ -293,18 +314,34 @@ struct DownloadDetailView: View {
     }
 
     private func activityFootnote(for item: DownloadItem) -> some View {
-        HStack(spacing: 10) {
-            Label(
-                "Added \(DownloadFormatting.dateString(item.createdAt))",
-                systemImage: "calendar"
-            )
-
-            if let finishedAt = item.finishedAt {
-                Text("•")
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) {
                 Label(
-                    "Finished \(DownloadFormatting.dateString(finishedAt))",
-                    systemImage: "checkmark.circle"
+                    "Added \(DownloadFormatting.dateString(item.createdAt))",
+                    systemImage: "calendar"
                 )
+
+                if let finishedAt = item.finishedAt {
+                    Text("•")
+                    Label(
+                        "Finished \(DownloadFormatting.dateString(finishedAt))",
+                        systemImage: "checkmark.circle"
+                    )
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Label(
+                    "Added \(DownloadFormatting.dateString(item.createdAt))",
+                    systemImage: "calendar"
+                )
+
+                if let finishedAt = item.finishedAt {
+                    Label(
+                        "Finished \(DownloadFormatting.dateString(finishedAt))",
+                        systemImage: "checkmark.circle"
+                    )
+                }
             }
         }
         .font(.caption)

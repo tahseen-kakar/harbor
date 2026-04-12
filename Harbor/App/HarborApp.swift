@@ -33,7 +33,7 @@ struct HarborApp: App {
 
         Settings {
             SettingsView(settings: settings, updater: updater)
-                .frame(width: 480, height: 340)
+                .frame(minWidth: 480, idealWidth: 500, minHeight: 340)
                 .padding(20)
         }
         .windowResizability(.contentSize)

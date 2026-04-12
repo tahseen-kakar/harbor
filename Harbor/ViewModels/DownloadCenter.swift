@@ -164,8 +164,58 @@ final class DownloadCenter {
         downloads.contains(where: \.isRunning)
     }
 
+    var hasPausableDownloads: Bool {
+        downloads.contains { item in
+            item.canPause || item.status == .queued
+        }
+    }
+
+    var hasResumableDownloads: Bool {
+        downloads.contains(where: \.canResume)
+    }
+
+    var hasCompletedDownloads: Bool {
+        downloads.contains { $0.status == .completed }
+    }
+
+    var hasFailedDownloads: Bool {
+        downloads.contains { $0.status == .failed }
+    }
+
     var activeDownloadCount: Int {
         downloads.filter { $0.status == .queued || $0.isRunning }.count
+    }
+
+    var canToggleSelectedDownload: Bool {
+        guard let selectedDownload else {
+            return false
+        }
+
+        return selectedDownload.status == .browserSessionRequired
+            || selectedDownload.canPause
+            || selectedDownload.canResume
+    }
+
+    var canRetrySelectedDownload: Bool {
+        guard let selectedDownload else {
+            return false
+        }
+
+        return selectedDownload.status == .failed
+            || selectedDownload.status == .cancelled
+    }
+
+    var canCancelSelectedDownload: Bool {
+        guard let selectedDownload else {
+            return false
+        }
+
+        return selectedDownload.status != .completed
+            && selectedDownload.status != .cancelled
+    }
+
+    var canOpenSelectedDownload: Bool {
+        selectedDownload?.fileLocationURL != nil
     }
 
     func count(for filter: DownloadFilter) -> Int {

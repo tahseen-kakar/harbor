@@ -105,10 +105,11 @@ struct AddDownloadSheet: View {
                     submit()
                 }
                 .keyboardShortcut(.defaultAction)
+                .disabled(canSubmit == false)
             }
         }
         .padding(24)
-        .frame(width: 560)
+        .frame(minWidth: 500, idealWidth: 560, maxWidth: 640)
         .onAppear {
             if entryMode == .linkOrMagnet {
                 focusedField = .sourceURL
@@ -145,7 +146,28 @@ struct AddDownloadSheet: View {
                 Button("Use Default") {
                     destinationPath = settings.defaultDestinationPath
                 }
+                .disabled(destinationPath == settings.defaultDestinationPath)
             }
+        }
+    }
+
+    private var canSubmit: Bool {
+        switch entryMode {
+        case .linkOrMagnet:
+            let trimmedURL = sourceURLText.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let parsedURL = URL(string: trimmedURL),
+                  let detectedKind = DownloadSourceKind.detect(from: parsedURL) else {
+                return false
+            }
+
+            return detectedKind == .directURL || detectedKind == .magnetLink
+
+        case .torrentFile:
+            guard let torrentFileURL else {
+                return false
+            }
+
+            return DownloadSourceKind.detect(from: torrentFileURL) == .torrentFile
         }
     }
 
