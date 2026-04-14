@@ -24,53 +24,59 @@ final class DownloadCoordinator: NSObject, @unchecked Sendable {
         var speedBytesPerSecond: Double
     }
 
+    private typealias TaskKey = String
+
     private struct TaskContext {
         let downloadID: UUID
+        let session: URLSession
         let task: URLSessionDownloadTask
         var transferSample: TransferSample
+        var isThrottled = false
     }
 
     private let eventHandler: EventHandler
     private let fileManager: FileManager
     private let stateLock = NSLock()
     private let ownedTemporaryDirectory: URL
+    private let delegateQueue: OperationQueue
 
-    private var contexts: [Int: TaskContext] = [:]
-    private var taskIdentifiersByDownloadID: [UUID: Int] = [:]
-    private var suppressedCompletionTaskIDs: Set<Int> = []
+    private var contexts: [TaskKey: TaskContext] = [:]
+    private var taskKeysByDownloadID: [UUID: TaskKey] = [:]
+    private var suppressedCompletionTaskKeys: Set<TaskKey> = []
+    private var transferSettings: DownloadTransferSettings
 
-    private lazy var session: URLSession = {
-        let configuration = URLSessionConfiguration.default
-        configuration.waitsForConnectivity = true
-        configuration.httpMaximumConnectionsPerHost = 8
-        configuration.allowsConstrainedNetworkAccess = true
-        configuration.allowsExpensiveNetworkAccess = true
-
-        let delegateQueue = OperationQueue()
-        delegateQueue.name = "DownloadCoordinatorDelegateQueue"
-        delegateQueue.maxConcurrentOperationCount = 1
-
-        return URLSession(
-            configuration: configuration,
-            delegate: self,
-            delegateQueue: delegateQueue
-        )
-    }()
-
-    init(eventHandler: @escaping EventHandler, fileManager: FileManager = .default) {
+    init(
+        transferSettings: DownloadTransferSettings = .default,
+        eventHandler: @escaping EventHandler,
+        fileManager: FileManager = .default
+    ) {
         self.eventHandler = eventHandler
         self.fileManager = fileManager
+        self.transferSettings = transferSettings
         self.ownedTemporaryDirectory = fileManager.temporaryDirectory
             .appendingPathComponent("HarborDownloads", isDirectory: true)
+        self.delegateQueue = OperationQueue()
+        self.delegateQueue.name = "DownloadCoordinatorDelegateQueue"
+        self.delegateQueue.maxConcurrentOperationCount = 1
         super.init()
     }
 
     deinit {
-        session.invalidateAndCancel()
+        withLock {
+            Array(contexts.values)
+        }
+        .forEach { $0.session.invalidateAndCancel() }
+    }
+
+    func updateTransferSettings(_ transferSettings: DownloadTransferSettings) {
+        withLock {
+            self.transferSettings = transferSettings
+        }
     }
 
     @discardableResult
     func startDownload(id: UUID, sourceURL: URL, resumeData: Data?) -> Int {
+        let session = makeSession()
         let task: URLSessionDownloadTask
         if let resumeData {
             task = session.downloadTask(withResumeData: resumeData)
@@ -78,8 +84,10 @@ final class DownloadCoordinator: NSObject, @unchecked Sendable {
             task = session.downloadTask(with: sourceURL)
         }
 
+        let key = makeTaskKey(session: session, taskIdentifier: task.taskIdentifier)
         let context = TaskContext(
             downloadID: id,
+            session: session,
             task: task,
             transferSample: TransferSample(
                 lastTotalBytesWritten: 0,
@@ -89,9 +97,9 @@ final class DownloadCoordinator: NSObject, @unchecked Sendable {
         )
 
         withLock {
-            contexts[task.taskIdentifier] = context
-            taskIdentifiersByDownloadID[id] = task.taskIdentifier
-            suppressedCompletionTaskIDs.remove(task.taskIdentifier)
+            contexts[key] = context
+            taskKeysByDownloadID[id] = key
+            suppressedCompletionTaskKeys.remove(key)
         }
 
         task.resume()
@@ -104,7 +112,8 @@ final class DownloadCoordinator: NSObject, @unchecked Sendable {
             return
         }
 
-        context.task.cancel(byProducingResumeData: { [eventHandler] resumeData in
+        context.task.cancel(byProducingResumeData: { [eventHandler, session = context.session] resumeData in
+            session.finishTasksAndInvalidate()
             eventHandler(.paused(id: id, resumeData: resumeData))
         })
     }
@@ -115,61 +124,149 @@ final class DownloadCoordinator: NSObject, @unchecked Sendable {
         }
 
         context.task.cancel()
+        context.session.invalidateAndCancel()
         eventHandler(.cancelled(id: id))
     }
 
     private func takeContext(forDownloadID id: UUID, suppressCompletion: Bool) -> TaskContext? {
         withLock {
-            guard let taskIdentifier = taskIdentifiersByDownloadID.removeValue(forKey: id),
-                  let context = contexts.removeValue(forKey: taskIdentifier) else {
+            guard let taskKey = taskKeysByDownloadID.removeValue(forKey: id),
+                  let context = contexts.removeValue(forKey: taskKey) else {
                 return nil
             }
 
             if suppressCompletion {
-                suppressedCompletionTaskIDs.insert(taskIdentifier)
+                suppressedCompletionTaskKeys.insert(taskKey)
             }
 
             return context
         }
     }
 
-    private func takeContext(forTaskIdentifier taskIdentifier: Int) -> TaskContext? {
+    private func takeContext(forTaskKey taskKey: TaskKey) -> TaskContext? {
         withLock {
-            guard let context = contexts.removeValue(forKey: taskIdentifier) else {
+            guard let context = contexts.removeValue(forKey: taskKey) else {
                 return nil
             }
 
-            taskIdentifiersByDownloadID.removeValue(forKey: context.downloadID)
+            taskKeysByDownloadID.removeValue(forKey: context.downloadID)
             return context
-        }
-    }
-
-    private func context(for taskIdentifier: Int) -> TaskContext? {
-        withLock {
-            contexts[taskIdentifier]
         }
     }
 
     private func updateContext(
-        for taskIdentifier: Int,
+        for taskKey: TaskKey,
         _ update: (inout TaskContext) -> Void
     ) -> TaskContext? {
         withLock {
-            guard var context = contexts[taskIdentifier] else {
+            guard var context = contexts[taskKey] else {
                 return nil
             }
 
             update(&context)
-            contexts[taskIdentifier] = context
+            contexts[taskKey] = context
             return context
         }
     }
 
-    private func shouldIgnoreCompletion(taskIdentifier: Int, error: NSError) -> Bool {
+    private func shouldIgnoreCompletion(taskKey: TaskKey, error: NSError) -> Bool {
         withLock {
-            let suppressed = suppressedCompletionTaskIDs.remove(taskIdentifier) != nil
+            let suppressed = suppressedCompletionTaskKeys.remove(taskKey) != nil
             return suppressed && error.domain == NSURLErrorDomain && error.code == NSURLErrorCancelled
         }
+    }
+
+    private func makeSession() -> URLSession {
+        let perDownloadConnectionCount = withLock {
+            transferSettings.perDownloadConnectionCount
+        }
+
+        let configuration = URLSessionConfiguration.default
+        configuration.waitsForConnectivity = true
+        configuration.httpMaximumConnectionsPerHost = perDownloadConnectionCount
+        configuration.allowsConstrainedNetworkAccess = true
+        configuration.allowsExpensiveNetworkAccess = true
+
+        return URLSession(
+            configuration: configuration,
+            delegate: self,
+            delegateQueue: delegateQueue
+        )
+    }
+
+    private func makeTaskKey(session: URLSession, taskIdentifier: Int) -> TaskKey {
+        "\(ObjectIdentifier(session))-\(taskIdentifier)"
+    }
+
+    private func throttleDelay(
+        deltaBytes: Int64,
+        elapsed: TimeInterval,
+        activeTransferCount: Int,
+        transferSettings: DownloadTransferSettings
+    ) -> TimeInterval? {
+        guard elapsed > 0,
+              deltaBytes > 0,
+              let effectiveLimit = effectiveSpeedLimit(
+                activeTransferCount: activeTransferCount,
+                transferSettings: transferSettings
+              ),
+              effectiveLimit > 0 else {
+            return nil
+        }
+
+        let desiredElapsed = Double(deltaBytes) / Double(effectiveLimit)
+        let delay = desiredElapsed - elapsed
+        guard delay > 0 else {
+            return nil
+        }
+
+        return min(max(delay, 0.1), 2.0)
+    }
+
+    private func effectiveSpeedLimit(
+        activeTransferCount: Int,
+        transferSettings: DownloadTransferSettings
+    ) -> Int64? {
+        var limits: [Int64] = []
+
+        if let globalSpeedLimit = transferSettings.globalSpeedLimitBytesPerSecond {
+            limits.append(max(globalSpeedLimit / Int64(max(activeTransferCount, 1)), 1))
+        }
+
+        if let perDownloadSpeedLimit = transferSettings.perDownloadSpeedLimitBytesPerSecond {
+            limits.append(perDownloadSpeedLimit)
+        }
+
+        return limits.min()
+    }
+
+    private func suspendForThrottle(taskKey: TaskKey, delay: TimeInterval) {
+        var shouldSuspend = false
+        let task = updateContext(for: taskKey) { context in
+            guard context.isThrottled == false else {
+                return
+            }
+
+            context.isThrottled = true
+            shouldSuspend = true
+        }?.task
+
+        guard shouldSuspend, let task else {
+            return
+        }
+
+        task.suspend()
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + delay) { [weak self] in
+            self?.resumeThrottledTask(taskKey: taskKey)
+        }
+    }
+
+    private func resumeThrottledTask(taskKey: TaskKey) {
+        let task = updateContext(for: taskKey) { context in
+            context.isThrottled = false
+        }?.task
+
+        task?.resume()
     }
 
     private func withLock<T>(_ work: () -> T) -> T {
@@ -208,7 +305,10 @@ extension DownloadCoordinator: URLSessionDownloadDelegate, URLSessionTaskDelegat
         totalBytesWritten: Int64,
         totalBytesExpectedToWrite: Int64
     ) {
-        guard let context = updateContext(for: downloadTask.taskIdentifier, { context in
+        let taskKey = makeTaskKey(session: session, taskIdentifier: downloadTask.taskIdentifier)
+        var throttleDelay: TimeInterval?
+
+        guard let context = updateContext(for: taskKey, { context in
             let now = Date()
             let elapsed = now.timeIntervalSince(context.transferSample.sampleDate)
             guard elapsed >= 0.35 else {
@@ -217,6 +317,12 @@ extension DownloadCoordinator: URLSessionDownloadDelegate, URLSessionTaskDelegat
 
             let deltaBytes = totalBytesWritten - context.transferSample.lastTotalBytesWritten
             let speed = elapsed > 0 ? Double(deltaBytes) / elapsed : context.transferSample.speedBytesPerSecond
+            throttleDelay = self.throttleDelay(
+                deltaBytes: deltaBytes,
+                elapsed: elapsed,
+                activeTransferCount: contexts.count,
+                transferSettings: transferSettings
+            )
             context.transferSample = TransferSample(
                 lastTotalBytesWritten: totalBytesWritten,
                 sampleDate: now,
@@ -234,6 +340,10 @@ extension DownloadCoordinator: URLSessionDownloadDelegate, URLSessionTaskDelegat
                 speedBytesPerSecond: context.transferSample.speedBytesPerSecond
             )
         )
+
+        if let throttleDelay {
+            suspendForThrottle(taskKey: taskKey, delay: throttleDelay)
+        }
     }
 
     func urlSession(
@@ -241,7 +351,8 @@ extension DownloadCoordinator: URLSessionDownloadDelegate, URLSessionTaskDelegat
         downloadTask: URLSessionDownloadTask,
         didFinishDownloadingTo location: URL
     ) {
-        guard let context = takeContext(forTaskIdentifier: downloadTask.taskIdentifier) else {
+        let taskKey = makeTaskKey(session: session, taskIdentifier: downloadTask.taskIdentifier)
+        guard let context = takeContext(forTaskKey: taskKey) else {
             return
         }
 
@@ -269,6 +380,8 @@ extension DownloadCoordinator: URLSessionDownloadDelegate, URLSessionTaskDelegat
                 )
             )
         }
+
+        context.session.finishTasksAndInvalidate()
     }
 
     func urlSession(
@@ -281,11 +394,12 @@ extension DownloadCoordinator: URLSessionDownloadDelegate, URLSessionTaskDelegat
         }
 
         let nsError = error as NSError
-        if shouldIgnoreCompletion(taskIdentifier: task.taskIdentifier, error: nsError) {
+        let taskKey = makeTaskKey(session: session, taskIdentifier: task.taskIdentifier)
+        if shouldIgnoreCompletion(taskKey: taskKey, error: nsError) {
             return
         }
 
-        guard let context = takeContext(forTaskIdentifier: task.taskIdentifier) else {
+        guard let context = takeContext(forTaskKey: taskKey) else {
             return
         }
 
@@ -297,5 +411,6 @@ extension DownloadCoordinator: URLSessionDownloadDelegate, URLSessionTaskDelegat
                 resumeData: resumeData
             )
         )
+        context.session.finishTasksAndInvalidate()
     }
 }

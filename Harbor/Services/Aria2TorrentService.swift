@@ -93,6 +93,11 @@ actor Aria2TorrentService {
     private var rpcPort: Int?
     private var rpcSecret: String?
     private var stderrPipe: Pipe?
+    private var transferSettings: DownloadTransferSettings
+
+    init(transferSettings: DownloadTransferSettings = .default) {
+        self.transferSettings = transferSettings
+    }
 
     deinit {
         stderrPipe?.fileHandleForReading.readabilityHandler = nil
@@ -103,6 +108,29 @@ actor Aria2TorrentService {
         Aria2BinaryResolver.resolveBinaryURL()?.path
     }
 
+    func updateTransferSettings(
+        _ transferSettings: DownloadTransferSettings,
+        activeGIDs: [String]
+    ) async {
+        self.transferSettings = transferSettings
+
+        guard process?.isRunning == true,
+              rpcPort != nil,
+              rpcSecret != nil else {
+            return
+        }
+
+        do {
+            try await applyGlobalOptions(transferSettings)
+
+            for gid in activeGIDs {
+                try? await applyDownloadOptions(transferSettings, gid: gid)
+            }
+        } catch {
+            logger.warning("Failed to update aria2 transfer settings: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
     func addDownload(
         sourceKind: DownloadSourceKind,
         sourceURL: URL,
@@ -111,10 +139,7 @@ actor Aria2TorrentService {
         logger.info("Starting torrent add request for source kind \(String(describing: sourceKind), privacy: .public)")
         try await ensureDaemonRunning()
 
-        let options: [String: String] = [
-            "dir": destinationFolderPath,
-            "pause": "false"
-        ]
+        let options = downloadOptions(destinationFolderPath: destinationFolderPath)
 
         switch sourceKind {
         case .magnetLink:
@@ -228,7 +253,11 @@ actor Aria2TorrentService {
             "--allow-overwrite=false",
             "--auto-file-renaming=true",
             "--summary-interval=0",
-            "--max-concurrent-downloads=64",
+            "--max-concurrent-downloads=\(transferSettings.maxConcurrentDownloads)",
+            "--max-overall-download-limit=\(aria2LimitString(transferSettings.globalSpeedLimitBytesPerSecond))",
+            "--max-download-limit=\(aria2LimitString(transferSettings.perDownloadSpeedLimitBytesPerSecond))",
+            "--max-connection-per-server=\(transferSettings.perDownloadConnectionCount)",
+            "--split=\(transferSettings.perDownloadConnectionCount)",
             "--check-certificate=true",
             "--console-log-level=notice"
         ]
@@ -260,6 +289,7 @@ actor Aria2TorrentService {
                 _ = try await rpcCall(method: "aria2.getVersion", params: [
                     authorizedToken()
                 ], as: VersionPayload.self)
+                try await applyGlobalOptions(transferSettings)
                 logger.info("aria2 RPC is ready")
                 return
             } catch {
@@ -286,6 +316,60 @@ actor Aria2TorrentService {
         }
 
         return "token:\(rpcSecret)"
+    }
+
+    private func downloadOptions(destinationFolderPath: String) -> [String: String] {
+        var options = [
+            "dir": destinationFolderPath,
+            "pause": "false"
+        ]
+
+        perDownloadOptions(transferSettings).forEach { key, value in
+            options[key] = value
+        }
+
+        return options
+    }
+
+    private func globalOptions(_ transferSettings: DownloadTransferSettings) -> [String: String] {
+        [
+            "max-concurrent-downloads": "\(transferSettings.maxConcurrentDownloads)",
+            "max-overall-download-limit": aria2LimitString(transferSettings.globalSpeedLimitBytesPerSecond)
+        ]
+    }
+
+    private func perDownloadOptions(_ transferSettings: DownloadTransferSettings) -> [String: String] {
+        [
+            "max-download-limit": aria2LimitString(transferSettings.perDownloadSpeedLimitBytesPerSecond),
+            "max-connection-per-server": "\(transferSettings.perDownloadConnectionCount)",
+            "split": "\(transferSettings.perDownloadConnectionCount)"
+        ]
+    }
+
+    private func applyGlobalOptions(_ transferSettings: DownloadTransferSettings) async throws {
+        _ = try await rpcCall(method: "aria2.changeGlobalOption", params: [
+            authorizedToken(),
+            globalOptions(transferSettings)
+        ], as: String.self)
+    }
+
+    private func applyDownloadOptions(
+        _ transferSettings: DownloadTransferSettings,
+        gid: String
+    ) async throws {
+        _ = try await rpcCall(method: "aria2.changeOption", params: [
+            authorizedToken(),
+            gid,
+            perDownloadOptions(transferSettings)
+        ], as: String.self)
+    }
+
+    private func aria2LimitString(_ bytesPerSecond: Int64?) -> String {
+        guard let bytesPerSecond else {
+            return "0"
+        }
+
+        return "\(max(bytesPerSecond, 0))"
     }
 
     private func rpcCall<Result: Decodable>(

@@ -11,7 +11,9 @@ struct HarborApp: App {
         let settings = AppSettingsStore()
         _settings = State(initialValue: settings)
         _center = State(initialValue: DownloadCenter(settings: settings))
-        _updater = StateObject(wrappedValue: AppUpdater())
+        _updater = StateObject(
+            wrappedValue: PreviewRuntime.isActive ? AppUpdater.preview(canCheckForUpdates: false) : AppUpdater()
+        )
     }
 
     var body: some Scene {
@@ -19,6 +21,10 @@ struct HarborApp: App {
             RootView(center: center, settings: settings)
                 .frame(minWidth: 1_040, minHeight: 680)
                 .task {
+                    guard PreviewRuntime.isActive == false else {
+                        return
+                    }
+
                     center.installExternalOpenHandlerIfNeeded()
                     await center.initializeIfNeeded()
                 }

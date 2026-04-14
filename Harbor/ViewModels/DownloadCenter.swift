@@ -33,14 +33,14 @@ final class DownloadCenter {
         persistence: DownloadPersistence = DownloadPersistence(),
         destinationResolver: DownloadDestinationResolver = DownloadDestinationResolver(),
         notificationService: DownloadNotificationService = DownloadNotificationService(),
-        torrentService: Aria2TorrentService = Aria2TorrentService()
+        torrentService: Aria2TorrentService? = nil
     ) {
         self.settings = settings
         self.persistence = persistence
         self.destinationResolver = destinationResolver
         self.notificationService = notificationService
-        self.torrentService = torrentService
-        self.coordinator = DownloadCoordinator { [weak self] event in
+        self.torrentService = torrentService ?? Aria2TorrentService(transferSettings: settings.transferSettings)
+        self.coordinator = DownloadCoordinator(transferSettings: settings.transferSettings) { [weak self] event in
             Task { @MainActor [weak self] in
                 self?.handle(event)
             }
@@ -49,6 +49,9 @@ final class DownloadCenter {
             Task { @MainActor [weak self] in
                 self?.handle(event)
             }
+        }
+        settings.transferSettingsDidChange = { [weak self] transferSettings in
+            self?.applyTransferSettings(transferSettings)
         }
     }
 
@@ -562,7 +565,7 @@ final class DownloadCenter {
             return
         }
 
-        if currentRunningDownloadsCount >= settings.maxConcurrentDownloads {
+        if currentRunningDownloadsCount >= settings.transferSettings.maxConcurrentDownloads {
             item.status = .queued
             item.updatedAt = .now
             schedulePersist()
@@ -684,7 +687,7 @@ final class DownloadCenter {
     }
 
     private func startNextQueuedDownloadsIfNeeded() {
-        let availableSlots = max(settings.maxConcurrentDownloads - currentRunningDownloadsCount, 0)
+        let availableSlots = max(settings.transferSettings.maxConcurrentDownloads - currentRunningDownloadsCount, 0)
         guard availableSlots > 0 else {
             return
         }
@@ -696,6 +699,23 @@ final class DownloadCenter {
         for item in queuedItems.prefix(availableSlots) {
             startOrQueueDownload(id: item.id)
         }
+    }
+
+    private func applyTransferSettings(_ transferSettings: DownloadTransferSettings) {
+        coordinator.updateTransferSettings(transferSettings)
+
+        let activeTorrentIdentifiers = downloads
+            .filter { $0.backend == .aria2 }
+            .compactMap(\.backendIdentifier)
+
+        Task { [torrentService] in
+            await torrentService.updateTransferSettings(
+                transferSettings,
+                activeGIDs: activeTorrentIdentifiers
+            )
+        }
+
+        startNextQueuedDownloadsIfNeeded()
     }
 
     private func startTorrentRefreshLoopIfNeeded() {

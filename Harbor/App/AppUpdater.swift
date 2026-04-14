@@ -16,6 +16,13 @@ final class AppUpdater: ObservableObject {
         self.currentBundle = bundle
         self.previewVersionLabel = nil
 
+        guard PreviewRuntime.isActive == false else {
+            self.updaterController = nil
+            self.automaticallyChecksForUpdates = false
+            self.canCheckForUpdates = false
+            return
+        }
+
         let controller = SPUStandardUpdaterController(
             startingUpdater: true,
             updaterDelegate: nil,

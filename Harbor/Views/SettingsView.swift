@@ -28,12 +28,36 @@ struct SettingsView: View {
                     }
                 }
 
-                Stepper(value: $settings.maxConcurrentDownloads, in: 1 ... 8) {
-                    LabeledContent("Concurrent Downloads", value: "\(settings.maxConcurrentDownloads)")
-                }
-
                 Toggle("Start downloads immediately", isOn: $settings.startDownloadsAutomatically)
                 Toggle("Send download notifications", isOn: $settings.notificationsEnabled)
+            }
+
+            Section("Bandwidth") {
+                Stepper(
+                    value: $settings.maxConcurrentDownloads,
+                    in: AppSettingsStore.maxConcurrentDownloadsRange
+                ) {
+                    LabeledContent("Max Active Downloads", value: "\(settings.maxConcurrentDownloads)")
+                }
+
+                Stepper(
+                    value: $settings.perDownloadConnectionCount,
+                    in: AppSettingsStore.perDownloadConnectionCountRange
+                ) {
+                    LabeledContent("Connections per Download", value: "\(settings.perDownloadConnectionCount)")
+                }
+
+                SpeedLimitRow(
+                    title: "Global Speed Limit",
+                    isEnabled: $settings.globalSpeedLimitEnabled,
+                    kilobytesPerSecond: $settings.globalSpeedLimitKilobytesPerSecond
+                )
+
+                SpeedLimitRow(
+                    title: "Per-Download Speed Limit",
+                    isEnabled: $settings.perDownloadSpeedLimitEnabled,
+                    kilobytesPerSecond: $settings.perDownloadSpeedLimitKilobytesPerSecond
+                )
             }
 
             Section("Updates") {
@@ -58,6 +82,39 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+private struct SpeedLimitRow: View {
+    let title: String
+    @Binding var isEnabled: Bool
+    @Binding var kilobytesPerSecond: Int
+
+    var body: some View {
+        LabeledContent(title) {
+            HStack(spacing: 8) {
+                Toggle("Limit", isOn: $isEnabled)
+                    .labelsHidden()
+
+                TextField(
+                    "Speed",
+                    value: $kilobytesPerSecond,
+                    format: .number
+                )
+                .monospacedDigit()
+                .frame(width: 92)
+                .disabled(isEnabled == false)
+
+                Text("KB/s")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .onChange(of: kilobytesPerSecond) { _, newValue in
+            let clampedValue = AppSettingsStore.clampedSpeedLimitKilobytes(newValue)
+            if clampedValue != newValue {
+                kilobytesPerSecond = clampedValue
+            }
+        }
     }
 }
 
