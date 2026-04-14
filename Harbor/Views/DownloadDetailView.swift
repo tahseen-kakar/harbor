@@ -3,168 +3,153 @@ import SwiftUI
 struct DownloadDetailView: View {
     let center: DownloadCenter
 
-    private let metricColumns = [
-        GridItem(.adaptive(minimum: 112), spacing: 12)
-    ]
-
     var body: some View {
         Group {
             if let item = center.selectedDownload {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 18) {
-                        overviewCard(for: item)
-                        storageCard(for: item)
-
-                        if item.status == .browserSessionRequired {
-                            browserSessionCard(message: item.lastError)
-                        }
-
-                        if let message = item.lastError, item.status == .failed {
-                            errorCard(message: message)
-                        }
-                    }
-                    .padding(24)
-                }
-                .navigationTitle(item.displayName)
+                DownloadInspectorContent(item: item, center: center)
             } else {
-                ContentUnavailableView {
-                    Label("Select a Download", systemImage: "sidebar.right")
-                } description: {
-                    Text("Choose any row to inspect progress, speed, file location, and recovery actions.")
-                } actions: {
-                    primaryActionButton(
-                        title: "Add Download",
-                        systemImage: "plus",
-                        isProminent: true
-                    ) {
-                        center.presentAddSheet()
+                EmptyDownloadDetailView(addDownload: center.presentAddSheet)
+            }
+        }
+    }
+}
+
+private struct DownloadInspectorContent: View {
+    let item: DownloadItem
+    let center: DownloadCenter
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                DownloadHeader(item: item)
+
+                DownloadActionRow(
+                    item: item,
+                    continueInBrowser: continueInBrowser,
+                    togglePauseResume: togglePauseResume,
+                    retry: retry,
+                    openFile: openFile,
+                    revealInFinder: revealInFinder,
+                    copySourceURL: copySourceURL
+                )
+
+                DownloadTransferSection(item: item)
+                DownloadStorageSection(item: item)
+                DownloadActivitySection(item: item)
+
+                if item.status == .browserSessionRequired {
+                    DownloadCallout(
+                        title: "Browser Session Required",
+                        message: item.lastError ?? "This site requires a browser session before Harbor can download the file.",
+                        systemImage: "globe",
+                        tint: .mint
+                    )
+                }
+
+                if let message = item.lastError, item.status == .failed {
+                    DownloadCallout(
+                        title: "Last Error",
+                        message: message,
+                        systemImage: "exclamationmark.triangle.fill",
+                        tint: .red
+                    )
+                }
+            }
+            .padding(24)
+        }
+        .navigationTitle(item.displayName)
+    }
+
+    private func continueInBrowser() {
+        center.continueInBrowser(id: item.id)
+    }
+
+    private func togglePauseResume() {
+        center.togglePauseResume(id: item.id)
+    }
+
+    private func retry() {
+        center.retryDownload(id: item.id)
+    }
+
+    private func openFile() {
+        center.openDownload(id: item.id)
+    }
+
+    private func revealInFinder() {
+        center.revealInFinder(id: item.id)
+    }
+
+    private func copySourceURL() {
+        center.copySourceURL(id: item.id)
+    }
+}
+
+private struct EmptyDownloadDetailView: View {
+    let addDownload: () -> Void
+
+    var body: some View {
+        ContentUnavailableView {
+            Label("Select a Download", systemImage: "sidebar.right")
+        } description: {
+            Text("Choose any row to inspect progress, speed, file location, and recovery actions.")
+        } actions: {
+            Button(action: addDownload) {
+                Label("Add Download", systemImage: "plus")
+            }
+            .buttonStyle(LiquidPillButtonStyle(prominent: true))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+private struct DownloadHeader: View {
+    let item: DownloadItem
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: item.sourceBadgeImage)
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 28)
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(item.displayName)
+                        .font(.title2.weight(.semibold))
+                        .lineLimit(3)
+
+                    sourceLine
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                DownloadStatusBadge(status: item.status)
+            }
+
+            progressBlock
+        }
+    }
+
+    private var sourceLine: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    Label(item.sourceBadgeTitle, systemImage: item.sourceBadgeImage)
+
+                    if let sourceSummary {
+                        Text(sourceSummary)
+                            .foregroundStyle(.tertiary)
                     }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-        }
-    }
 
-    private func overviewCard(for item: DownloadItem) -> some View {
-        inspectorCard {
-            overviewHeader(for: item)
-
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Text("Progress")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-
-                    Spacer()
-
-                    Text(progressLabel(for: item))
-                        .font(.caption.weight(.semibold))
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
-                }
-
-                if let progressValue = item.progressValue {
-                    ProgressView(value: progressValue, total: 1)
-                        .tint(progressTint(for: item))
-                } else if item.status == .preparing || item.status == .downloading {
-                    ProgressView()
-                        .controlSize(.small)
-                } else {
-                    ProgressView(value: item.progress, total: 1)
-                        .tint(progressTint(for: item))
-                }
-            }
-
-            LazyVGrid(columns: metricColumns, spacing: 12) {
-                metricTile(
-                    title: "Downloaded",
-                    value: item.progressText,
-                    systemImage: "arrow.down.circle"
-                )
-
-                metricTile(
-                    title: "Download Speed",
-                    value: item.speedText,
-                    systemImage: "speedometer"
-                )
-
-                if item.backend == .aria2 {
-                    metricTile(
-                        title: "Upload Speed",
-                        value: DownloadFormatting.throughputString(item.uploadBytesPerSecond),
-                        systemImage: "arrow.up.circle"
-                    )
-                }
-
-                if let eta = item.etaText {
-                    metricTile(
-                        title: "ETA",
-                        value: eta,
-                        systemImage: "clock"
-                    )
-                }
-            }
-
-            actionBar(for: item)
-
-            activityFootnote(for: item)
-        }
-    }
-
-    private func overviewHeader(for item: DownloadItem) -> some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .top, spacing: 16) {
-                sourceIcon(for: item)
-                overviewTitleBlock(for: item)
-                Spacer(minLength: 16)
-                DownloadStatusBadge(status: item.status)
-            }
-
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .top, spacing: 12) {
-                    sourceIcon(for: item)
-                    overviewTitleBlock(for: item)
-                }
-
-                DownloadStatusBadge(status: item.status)
-            }
-        }
-    }
-
-    private func sourceIcon(for item: DownloadItem) -> some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(.quaternary.opacity(0.55))
-
-            Image(systemName: item.sourceBadgeImage)
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(.secondary)
-        }
-        .frame(width: 46, height: 46)
-    }
-
-    private func overviewTitleBlock(for item: DownloadItem) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(item.displayName)
-                .font(.title2.weight(.semibold))
-                .lineLimit(3)
-
-            HStack(spacing: 8) {
                 Label(item.sourceBadgeTitle, systemImage: item.sourceBadgeImage)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-
-                if let summary = sourceSummary(for: item) {
-                    Text(summary)
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                }
             }
+            .font(.caption.weight(.medium))
+            .foregroundStyle(.secondary)
 
-            if let sourceLine = sourceLine(for: item) {
-                Text(sourceLine)
+            if let sourceDetail {
+                Text(sourceDetail)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
@@ -173,221 +158,43 @@ struct DownloadDetailView: View {
         }
     }
 
-    private func storageCard(for item: DownloadItem) -> some View {
-        inspectorCard {
-            Text("Storage")
-                .font(.headline)
+    private var progressBlock: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Progress")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
 
-            pathRow(
-                title: "Destination",
-                systemImage: "folder",
-                path: item.destinationFolderPath
-            )
+                Spacer()
 
-            if let fileLocationPath = item.fileLocationPath {
-                pathRow(
-                    title: "Saved File",
-                    systemImage: "doc",
-                    path: fileLocationPath
-                )
+                Text(progressLabel)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+
+            if let progressValue = item.progressValue {
+                ProgressView(value: progressValue, total: 1)
+                    .tint(progressTint)
+            } else if item.status == .preparing || item.status == .downloading {
+                ProgressView()
+                    .controlSize(.small)
+            } else {
+                ProgressView(value: item.progress, total: 1)
+                    .tint(progressTint)
             }
         }
     }
 
-    private func errorCard(message: String) -> some View {
-        inspectorCard {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.red)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Last Error")
-                        .font(.headline)
-                    Text(message)
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                }
-            }
-        }
-    }
-
-    private func browserSessionCard(message: String?) -> some View {
-        inspectorCard {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: "globe")
-                    .foregroundStyle(.mint)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Browser Session Required")
-                        .font(.headline)
-
-                    Text(message ?? "This site requires a browser session before Harbor can download the file.")
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func actionBar(for item: DownloadItem) -> some View {
-        ViewThatFits {
-            HStack(spacing: 10) {
-                primaryTransportAction(for: item)
-                auxiliaryAction(for: item)
-                overflowMenu(for: item)
-                Spacer(minLength: 0)
-            }
-
-            VStack(alignment: .leading, spacing: 10) {
-                primaryTransportAction(for: item)
-                HStack(spacing: 10) {
-                    auxiliaryAction(for: item)
-                    overflowMenu(for: item)
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func primaryTransportAction(for item: DownloadItem) -> some View {
-        if item.status == .browserSessionRequired {
-            primaryActionButton(
-                title: "Continue in Harbor",
-                systemImage: "globe",
-                isProminent: true
-            ) {
-                center.continueInBrowser(id: item.id)
-            }
-        } else {
-            let isPause = item.canPause
-
-            primaryActionButton(
-                title: isPause ? "Pause" : "Resume",
-                systemImage: isPause ? "pause.fill" : "play.fill",
-                isProminent: true
-            ) {
-                center.togglePauseResume(id: item.id)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func auxiliaryAction(for item: DownloadItem) -> some View {
-        if item.status == .failed || item.status == .cancelled {
-            secondaryActionButton(
-                title: "Retry",
-                systemImage: "arrow.clockwise"
-            ) {
-                center.retryDownload(id: item.id)
-            }
-        } else if item.fileLocationURL != nil {
-            secondaryActionButton(
-                title: "Open File",
-                systemImage: "doc.fill"
-            ) {
-                center.openDownload(id: item.id)
-            }
-        }
-    }
-
-    private func overflowMenu(for item: DownloadItem) -> some View {
-        Menu {
-            Button("Reveal in Finder", systemImage: "folder") {
-                center.revealInFinder(id: item.id)
-            }
-
-            if item.fileLocationURL != nil,
-               item.status == .failed || item.status == .cancelled {
-                Button("Open File", systemImage: "doc") {
-                    center.openDownload(id: item.id)
-                }
-            }
-
-            Button("Copy Source URL", systemImage: "link") {
-                center.copySourceURL(id: item.id)
-            }
-        } label: {
-            Label("More", systemImage: "ellipsis.circle")
-                .frame(minWidth: 72)
-        }
-        .modifier(GlassButtonModifier(prominent: false))
-    }
-
-    private func activityFootnote(for item: DownloadItem) -> some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 10) {
-                Label(
-                    "Added \(DownloadFormatting.dateString(item.createdAt))",
-                    systemImage: "calendar"
-                )
-
-                if let finishedAt = item.finishedAt {
-                    Text("•")
-                    Label(
-                        "Finished \(DownloadFormatting.dateString(finishedAt))",
-                        systemImage: "checkmark.circle"
-                    )
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 6) {
-                Label(
-                    "Added \(DownloadFormatting.dateString(item.createdAt))",
-                    systemImage: "calendar"
-                )
-
-                if let finishedAt = item.finishedAt {
-                    Label(
-                        "Finished \(DownloadFormatting.dateString(finishedAt))",
-                        systemImage: "checkmark.circle"
-                    )
-                }
-            }
-        }
-        .font(.caption)
-        .foregroundStyle(.secondary)
-    }
-
-    private func pathRow(title: String, systemImage: String, path: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Label(title, systemImage: systemImage)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
-
-            Text(path)
-                .font(.callout)
-                .foregroundStyle(.primary)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(14)
-        .background(.quaternary.opacity(0.36), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-    }
-
-    private func metricTile(title: String, value: String, systemImage: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Label(title, systemImage: systemImage)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
-
-            Text(value)
-                .font(.headline.weight(.semibold))
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .background(.quaternary.opacity(0.36), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-    }
-
-    private func progressLabel(for item: DownloadItem) -> String {
+    private var progressLabel: String {
         if let progressValue = item.progressValue {
             return "\(Int((progressValue * 100).rounded()))%"
         }
 
-        return item.status == .preparing ? "Starting…" : item.status.title
+        return item.status == .preparing ? "Starting..." : item.status.title
     }
 
-    private func progressTint(for item: DownloadItem) -> Color {
+    private var progressTint: Color {
         switch item.status {
         case .downloading:
             .blue
@@ -406,7 +213,7 @@ struct DownloadDetailView: View {
         }
     }
 
-    private func sourceSummary(for item: DownloadItem) -> String? {
+    private var sourceSummary: String? {
         switch item.sourceKind {
         case .directURL:
             item.sourceURL.host
@@ -417,7 +224,7 @@ struct DownloadDetailView: View {
         }
     }
 
-    private func sourceLine(for item: DownloadItem) -> String? {
+    private var sourceDetail: String? {
         switch item.sourceKind {
         case .directURL:
             item.sourceURL.absoluteString
@@ -427,83 +234,552 @@ struct DownloadDetailView: View {
             item.sourceURL.lastPathComponent
         }
     }
+}
+
+private struct DownloadActionRow: View {
+    let item: DownloadItem
+    let continueInBrowser: () -> Void
+    let togglePauseResume: () -> Void
+    let retry: () -> Void
+    let openFile: () -> Void
+    let revealInFinder: () -> Void
+    let copySourceURL: () -> Void
+
+    var body: some View {
+        if #available(macOS 26, *) {
+            GlassEffectContainer(spacing: 10) {
+                actionLayout
+            }
+        } else {
+            actionLayout
+        }
+    }
+
+    private var actionLayout: some View {
+        ViewThatFits {
+            HStack(spacing: 10) {
+                primaryAction
+                secondaryAction
+                overflowMenu
+                Spacer(minLength: 0)
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                primaryAction
+                HStack(spacing: 10) {
+                    secondaryAction
+                    overflowMenu
+                }
+            }
+        }
+    }
 
     @ViewBuilder
-    private func inspectorCard<Content: View>(
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        let body = VStack(alignment: .leading, spacing: 16) {
+    private var primaryAction: some View {
+        if item.status == .browserSessionRequired {
+            Button(action: continueInBrowser) {
+                Label("Continue", systemImage: "globe")
+            }
+            .buttonStyle(LiquidPillButtonStyle(prominent: true))
+        } else {
+            let isPause = item.canPause
+
+            Button(action: togglePauseResume) {
+                Label(isPause ? "Pause" : "Resume", systemImage: isPause ? "pause.fill" : "play.fill")
+            }
+            .buttonStyle(LiquidPillButtonStyle(prominent: true))
+        }
+    }
+
+    @ViewBuilder
+    private var secondaryAction: some View {
+        if item.status == .failed || item.status == .cancelled {
+            Button(action: retry) {
+                Label("Retry", systemImage: "arrow.clockwise")
+            }
+            .buttonStyle(LiquidPillButtonStyle(prominent: false))
+        } else if item.fileLocationURL != nil {
+            Button(action: openFile) {
+                Label("Open", systemImage: "doc.fill")
+            }
+            .buttonStyle(LiquidPillButtonStyle(prominent: false))
+        }
+    }
+
+    private var overflowMenu: some View {
+        Menu {
+            Button("Reveal in Finder", systemImage: "folder", action: revealInFinder)
+
+            if item.fileLocationURL != nil,
+               item.status == .failed || item.status == .cancelled {
+                Button("Open File", systemImage: "doc", action: openFile)
+            }
+
+            Button("Copy Source URL", systemImage: "link", action: copySourceURL)
+        } label: {
+            Label("More", systemImage: "ellipsis")
+        }
+        .buttonStyle(LiquidPillButtonStyle(prominent: false))
+    }
+}
+
+private struct DownloadTransferSection: View {
+    let item: DownloadItem
+
+    var body: some View {
+        DownloadDetailSection(title: "Transfer") {
+            VStack(spacing: 0) {
+                DownloadedTransferRow(item: item)
+
+                if let eta = item.etaText {
+                    Divider()
+                    DownloadValueRow(title: "ETA", value: eta)
+                }
+            }
+        }
+    }
+}
+
+private struct DownloadedTransferRow: View {
+    let item: DownloadItem
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 14) {
+                downloadedValue
+                Spacer(minLength: 12)
+                speedValues
+            }
+            .padding(.vertical, 9)
+
+            VStack(alignment: .leading, spacing: 8) {
+                downloadedValue
+                speedValues
+            }
+            .padding(.vertical, 9)
+        }
+    }
+
+    private var downloadedValue: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Downloaded")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+
+            Text(item.progressText)
+                .font(.callout)
+                .foregroundStyle(.primary)
+                .lineLimit(3)
+                .textSelection(.enabled)
+        }
+    }
+
+    private var speedValues: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Speed")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 14) {
+                SpeedValue(
+                    systemImage: "arrow.down",
+                    value: item.speedText,
+                    accessibilityLabel: "Download speed"
+                )
+
+                if item.backend == .aria2 {
+                    SpeedValue(
+                        systemImage: "arrow.up",
+                        value: DownloadFormatting.throughputString(item.uploadBytesPerSecond),
+                        accessibilityLabel: "Upload speed"
+                    )
+                }
+            }
+        }
+    }
+}
+
+private struct SpeedValue: View {
+    let systemImage: String
+    let value: String
+    let accessibilityLabel: String
+
+    var body: some View {
+        Label {
+            Text(value)
+                .font(.callout)
+                .foregroundStyle(.primary)
+                .monospacedDigit()
+                .textSelection(.enabled)
+        } icon: {
+            Image(systemName: systemImage)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 14)
+                .accessibilityHidden(true)
+        }
+        .accessibilityLabel("\(accessibilityLabel): \(value)")
+    }
+}
+
+private struct DownloadStorageSection: View {
+    let item: DownloadItem
+
+    var body: some View {
+        DownloadDetailSection(title: "Storage") {
+            VStack(spacing: 0) {
+                DownloadValueRow(title: "Destination", value: item.destinationFolderPath)
+
+                if let fileLocationPath = item.fileLocationPath {
+                    Divider()
+                    DownloadValueRow(title: "Saved File", value: fileLocationPath)
+                }
+            }
+        }
+    }
+}
+
+private struct DownloadValueRow: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+
+            Text(value)
+                .font(.callout)
+                .foregroundStyle(.primary)
+                .lineLimit(3)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.vertical, 9)
+    }
+}
+
+private struct DownloadCallout: View {
+    let title: String
+    let message: String
+    let systemImage: String
+    let tint: Color
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: systemImage)
+                .foregroundStyle(tint)
+                .frame(width: 18)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.callout.weight(.semibold))
+
+                Text(message)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+private struct DownloadActivitySection: View {
+    let item: DownloadItem
+
+    var body: some View {
+        DownloadDetailSection(title: "Activity") {
+            VStack(alignment: .leading, spacing: 0) {
+                let activityEntries = entries
+
+                ForEach(Array(activityEntries.enumerated()), id: \.element.id) { index, entry in
+                    DownloadActivityRow(
+                        entry: entry,
+                        isLast: index == activityEntries.count - 1
+                    )
+                }
+            }
+        }
+    }
+
+    private var entries: [DownloadActivityTimelineEntry] {
+        var entries = item.activityEvents.map { event in
+            DownloadActivityTimelineEntry(event: event)
+        }
+
+        appendSyntheticEvent(
+            kind: .added,
+            timestamp: item.createdAt,
+            to: &entries
+        )
+
+        if let startedAt = item.startedAt,
+           entries.contains(where: { $0.kind == .started || $0.kind == .resumed }) == false {
+            entries.append(
+                DownloadActivityTimelineEntry(
+                    id: "synthetic-started-\(item.id.uuidString)",
+                    kind: .started,
+                    timestamp: startedAt
+                )
+            )
+        }
+
+        appendCurrentStatusFallback(to: &entries)
+
+        return entries.sorted { lhs, rhs in
+            if lhs.timestamp == rhs.timestamp {
+                return lhs.kind.sortPriority > rhs.kind.sortPriority
+            }
+
+            return lhs.timestamp > rhs.timestamp
+        }
+    }
+
+    private func appendCurrentStatusFallback(
+        to entries: inout [DownloadActivityTimelineEntry]
+    ) {
+        switch item.status {
+        case .queued:
+            appendSyntheticEvent(kind: .queued, timestamp: item.updatedAt, to: &entries)
+        case .preparing, .downloading:
+            if entries.contains(where: { $0.kind == .started || $0.kind == .resumed }) == false {
+                appendSyntheticEvent(kind: .started, timestamp: item.startedAt ?? item.updatedAt, to: &entries)
+            }
+        case .browserSessionRequired:
+            appendSyntheticEvent(kind: .browserSessionRequired, timestamp: item.updatedAt, to: &entries)
+        case .paused:
+            appendSyntheticEvent(kind: .paused, timestamp: item.updatedAt, to: &entries)
+        case .completed:
+            appendSyntheticEvent(kind: .completed, timestamp: item.finishedAt ?? item.updatedAt, to: &entries)
+        case .failed:
+            appendSyntheticEvent(kind: .failed, timestamp: item.updatedAt, to: &entries)
+        case .cancelled:
+            appendSyntheticEvent(kind: .cancelled, timestamp: item.updatedAt, to: &entries)
+        }
+    }
+
+    private func appendSyntheticEvent(
+        kind: DownloadActivityKind,
+        timestamp: Date,
+        to entries: inout [DownloadActivityTimelineEntry]
+    ) {
+        guard entries.contains(where: { $0.kind == kind }) == false else {
+            return
+        }
+
+        entries.append(
+            DownloadActivityTimelineEntry(
+                id: "synthetic-\(kind.rawValue)-\(item.id.uuidString)",
+                kind: kind,
+                timestamp: timestamp
+            )
+        )
+    }
+}
+
+private struct DownloadActivityTimelineEntry: Identifiable {
+    let id: String
+    let kind: DownloadActivityKind
+    let timestamp: Date
+
+    init(event: DownloadActivityEvent) {
+        self.id = event.id.uuidString
+        self.kind = event.kind
+        self.timestamp = event.timestamp
+    }
+
+    init(
+        id: String,
+        kind: DownloadActivityKind,
+        timestamp: Date
+    ) {
+        self.id = id
+        self.kind = kind
+        self.timestamp = timestamp
+    }
+}
+
+private struct DownloadActivityRow: View {
+    let entry: DownloadActivityTimelineEntry
+    let isLast: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            VStack(spacing: 3) {
+                ZStack {
+                    Circle()
+                        .fill(entry.kind.tint.opacity(0.14))
+
+                    Image(systemName: entry.kind.systemImage)
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(entry.kind.tint)
+                        .accessibilityHidden(true)
+                }
+                .frame(width: 22, height: 22)
+
+                if isLast == false {
+                    Rectangle()
+                        .fill(Color.secondary.opacity(0.22))
+                        .frame(width: 1, height: 18)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(entry.kind.title)
+                    .font(.callout.weight(.medium))
+
+                Text(DownloadFormatting.dateString(entry.timestamp))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.top, 1)
+        }
+        .padding(.vertical, 6)
+    }
+}
+
+private extension DownloadActivityKind {
+    var title: String {
+        switch self {
+        case .added:
+            "Added"
+        case .queued:
+            "Queued"
+        case .started:
+            "Started"
+        case .resumed:
+            "Resumed"
+        case .paused:
+            "Paused"
+        case .browserSessionRequired:
+            "Needs Browser"
+        case .completed:
+            "Completed"
+        case .failed:
+            "Failed"
+        case .cancelled:
+            "Cancelled"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .added:
+            "plus"
+        case .queued:
+            "clock"
+        case .started:
+            "play.fill"
+        case .resumed:
+            "forward.fill"
+        case .paused:
+            "pause.fill"
+        case .browserSessionRequired:
+            "globe"
+        case .completed:
+            "checkmark"
+        case .failed:
+            "exclamationmark"
+        case .cancelled:
+            "xmark"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .added:
+            .blue
+        case .queued:
+            .orange
+        case .started, .resumed:
+            .green
+        case .paused:
+            .yellow
+        case .browserSessionRequired:
+            .mint
+        case .completed:
+            .green
+        case .failed:
+            .red
+        case .cancelled:
+            .secondary
+        }
+    }
+
+    var sortPriority: Int {
+        switch self {
+        case .cancelled, .failed, .completed:
+            8
+        case .paused, .browserSessionRequired:
+            7
+        case .resumed:
+            6
+        case .started:
+            5
+        case .queued:
+            4
+        case .added:
+            3
+        }
+    }
+}
+
+private struct DownloadDetailSection<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.headline)
+
             content()
         }
-        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct LiquidPillButtonStyle: ButtonStyle {
+    let prominent: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        let label = configuration.label
+            .font(.callout.weight(.medium))
+            .lineLimit(1)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
+            .frame(minHeight: 32)
+            .foregroundStyle(prominent ? Color.white : Color.secondary)
+            .opacity(configuration.isPressed ? 0.78 : 1)
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
 
         if #available(macOS 26, *) {
-            body
-                .glassEffect(.regular, in: .rect(cornerRadius: 20))
+            label
+                .glassEffect(
+                    prominent ? .regular.tint(.accentColor).interactive() : .regular.interactive(),
+                    in: .rect(cornerRadius: 16)
+                )
         } else {
-            body
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            label
+                .background(
+                    prominent ? Color.accentColor.opacity(0.16) : Color.secondary.opacity(0.08),
+                    in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+                )
                 .overlay {
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .strokeBorder(.white.opacity(0.35))
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(
+                            prominent ? Color.accentColor.opacity(0.24) : Color.secondary.opacity(0.16)
+                        )
                 }
         }
-    }
-
-    private func primaryActionButton(
-        title: String,
-        systemImage: String,
-        isProminent: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Label(title, systemImage: systemImage)
-                .frame(minWidth: 96)
-        }
-        .modifier(GlassButtonModifier(prominent: isProminent))
-    }
-
-    private func secondaryActionButton(
-        title: String,
-        systemImage: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Label(title, systemImage: systemImage)
-        }
-        .modifier(GlassButtonModifier(prominent: false))
     }
 }
 
 #Preview("Download Detail") {
     DownloadDetailView(center: HarborPreviewFixtures.makeCenter())
         .frame(width: 420, height: 760)
-}
-
-private struct GlassButtonModifier: ViewModifier {
-    let prominent: Bool
-
-    func body(content: Content) -> some View {
-        if #available(macOS 26, *) {
-            if prominent {
-                content
-                    .buttonStyle(.glassProminent)
-                    .controlSize(.regular)
-            } else {
-                content
-                    .buttonStyle(.glass)
-                    .controlSize(.regular)
-            }
-        } else {
-            if prominent {
-                content
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.regular)
-            } else {
-                content
-                    .buttonStyle(.bordered)
-                    .controlSize(.regular)
-            }
-        }
-    }
 }

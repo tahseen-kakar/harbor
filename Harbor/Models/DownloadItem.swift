@@ -67,6 +67,34 @@ enum DownloadStatus: String, Codable, CaseIterable, Sendable {
     }
 }
 
+enum DownloadActivityKind: String, Codable, Sendable {
+    case added
+    case queued
+    case started
+    case resumed
+    case paused
+    case browserSessionRequired
+    case completed
+    case failed
+    case cancelled
+}
+
+struct DownloadActivityEvent: Codable, Identifiable, Hashable, Sendable {
+    let id: UUID
+    let kind: DownloadActivityKind
+    let timestamp: Date
+
+    init(
+        id: UUID = UUID(),
+        kind: DownloadActivityKind,
+        timestamp: Date = .now
+    ) {
+        self.id = id
+        self.kind = kind
+        self.timestamp = timestamp
+    }
+}
+
 struct DownloadRecord: Codable, Sendable {
     let id: UUID
     let sourceURL: URL
@@ -87,6 +115,7 @@ struct DownloadRecord: Codable, Sendable {
     let resumeData: Data?
     let backendIdentifier: String?
     let metadataName: String?
+    let activityEvents: [DownloadActivityEvent]
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -108,6 +137,7 @@ struct DownloadRecord: Codable, Sendable {
         case resumeData
         case backendIdentifier
         case metadataName
+        case activityEvents
     }
 
     init(
@@ -129,7 +159,8 @@ struct DownloadRecord: Codable, Sendable {
         lastError: String?,
         resumeData: Data?,
         backendIdentifier: String?,
-        metadataName: String?
+        metadataName: String?,
+        activityEvents: [DownloadActivityEvent] = []
     ) {
         self.id = id
         self.sourceURL = sourceURL
@@ -150,6 +181,7 @@ struct DownloadRecord: Codable, Sendable {
         self.resumeData = resumeData
         self.backendIdentifier = backendIdentifier
         self.metadataName = metadataName
+        self.activityEvents = activityEvents
     }
 
     init(from decoder: Decoder) throws {
@@ -173,6 +205,7 @@ struct DownloadRecord: Codable, Sendable {
         self.resumeData = try container.decodeIfPresent(Data.self, forKey: .resumeData)
         self.backendIdentifier = try container.decodeIfPresent(String.self, forKey: .backendIdentifier)
         self.metadataName = try container.decodeIfPresent(String.self, forKey: .metadataName)
+        self.activityEvents = try container.decodeIfPresent([DownloadActivityEvent].self, forKey: .activityEvents) ?? []
     }
 
     func encode(to encoder: Encoder) throws {
@@ -196,6 +229,7 @@ struct DownloadRecord: Codable, Sendable {
         try container.encode(resumeData, forKey: .resumeData)
         try container.encode(backendIdentifier, forKey: .backendIdentifier)
         try container.encode(metadataName, forKey: .metadataName)
+        try container.encode(activityEvents, forKey: .activityEvents)
     }
 }
 
@@ -224,6 +258,7 @@ final class DownloadItem: Identifiable {
     var taskIdentifier: Int?
     var backendIdentifier: String?
     var metadataName: String?
+    var activityEvents: [DownloadActivityEvent]
 
     init(
         id: UUID = UUID(),
@@ -247,7 +282,8 @@ final class DownloadItem: Identifiable {
         resumeData: Data? = nil,
         taskIdentifier: Int? = nil,
         backendIdentifier: String? = nil,
-        metadataName: String? = nil
+        metadataName: String? = nil,
+        activityEvents: [DownloadActivityEvent] = []
     ) {
         self.id = id
         self.createdAt = createdAt
@@ -271,6 +307,14 @@ final class DownloadItem: Identifiable {
         self.taskIdentifier = taskIdentifier
         self.backendIdentifier = backendIdentifier
         self.metadataName = metadataName
+        self.activityEvents = activityEvents
+
+        if self.activityEvents.contains(where: { $0.kind == .added }) == false {
+            self.activityEvents.insert(
+                DownloadActivityEvent(kind: .added, timestamp: createdAt),
+                at: 0
+            )
+        }
     }
 
     convenience init(record: DownloadRecord) {
@@ -296,7 +340,8 @@ final class DownloadItem: Identifiable {
             resumeData: record.resumeData,
             taskIdentifier: nil,
             backendIdentifier: record.backendIdentifier,
-            metadataName: record.metadataName
+            metadataName: record.metadataName,
+            activityEvents: record.activityEvents
         )
     }
 
@@ -432,7 +477,26 @@ final class DownloadItem: Identifiable {
             lastError: lastError,
             resumeData: resumeData,
             backendIdentifier: backendIdentifier,
-            metadataName: metadataName
+            metadataName: metadataName,
+            activityEvents: activityEvents
         )
+    }
+
+    func recordActivity(
+        _ kind: DownloadActivityKind,
+        timestamp: Date = .now
+    ) {
+        activityEvents.append(
+            DownloadActivityEvent(kind: kind, timestamp: timestamp)
+        )
+
+        while activityEvents.count > 40 {
+            if activityEvents.first?.kind == .added,
+               activityEvents.count > 1 {
+                activityEvents.remove(at: 1)
+            } else {
+                activityEvents.removeFirst()
+            }
+        }
     }
 }

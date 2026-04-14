@@ -372,7 +372,7 @@ final class DownloadCenter {
             if item.canPause {
                 pauseDownload(id: item.id)
             } else if item.status == .queued {
-                item.status = .paused
+                setStatus(for: item, to: .paused)
                 item.updatedAt = .now
             }
         }
@@ -566,7 +566,7 @@ final class DownloadCenter {
         }
 
         if currentRunningDownloadsCount >= settings.transferSettings.maxConcurrentDownloads {
-            item.status = .queued
+            setStatus(for: item, to: .queued)
             item.updatedAt = .now
             schedulePersist()
             return
@@ -579,7 +579,7 @@ final class DownloadCenter {
 
         switch item.backend {
         case .urlSession:
-            item.status = .preparing
+            setStatus(for: item, to: .preparing)
             item.taskIdentifier = coordinator.startDownload(
                 id: item.id,
                 sourceURL: item.sourceURL,
@@ -590,7 +590,7 @@ final class DownloadCenter {
             schedulePersist()
 
         case .aria2:
-            item.status = .preparing
+            setStatus(for: item, to: .preparing)
             item.startedAt = item.startedAt ?? .now
             schedulePersist()
             Task { @MainActor [weak self] in
@@ -626,7 +626,7 @@ final class DownloadCenter {
                 return
             }
 
-            refreshedItem.status = .downloading
+            setStatus(for: refreshedItem, to: .downloading)
             refreshedItem.updatedAt = .now
             schedulePersist()
         } catch {
@@ -635,7 +635,7 @@ final class DownloadCenter {
             }
 
             if hadBackendIdentifier, isTransientTorrentEngineError(error) {
-                refreshedItem.status = .paused
+                setStatus(for: refreshedItem, to: .paused)
                 refreshedItem.speedBytesPerSecond = 0
                 refreshedItem.uploadBytesPerSecond = 0
                 refreshedItem.updatedAt = .now
@@ -661,7 +661,7 @@ final class DownloadCenter {
             return
         }
 
-        item.status = .paused
+        setStatus(for: item, to: .paused)
         item.taskIdentifier = nil
         item.speedBytesPerSecond = 0
         item.uploadBytesPerSecond = 0
@@ -793,14 +793,14 @@ final class DownloadCenter {
 
         switch snapshot.status {
         case "active":
-            item.status = .downloading
+            setStatus(for: item, to: .downloading)
             item.lastError = nil
 
         case "waiting":
-            item.status = .queued
+            setStatus(for: item, to: .queued)
 
         case "paused":
-            item.status = .paused
+            setStatus(for: item, to: .paused)
             item.speedBytesPerSecond = 0
             item.uploadBytesPerSecond = 0
 
@@ -851,7 +851,7 @@ final class DownloadCenter {
             }
 
             item.taskIdentifier = taskIdentifier
-            item.status = .downloading
+            setStatus(for: item, to: .downloading)
             item.updatedAt = .now
             item.uploadBytesPerSecond = 0
 
@@ -876,7 +876,7 @@ final class DownloadCenter {
 
             item.resumeData = resumeData
             item.taskIdentifier = nil
-            item.status = .paused
+            setStatus(for: item, to: .paused)
             item.speedBytesPerSecond = 0
             item.uploadBytesPerSecond = 0
             item.updatedAt = .now
@@ -955,7 +955,7 @@ final class DownloadCenter {
             }
 
             activeBrowserSession = nil
-            item.status = .downloading
+            setStatus(for: item, to: .downloading)
             item.progress = 0
             item.bytesWritten = 0
             if expectedBytes > 0 {
@@ -1054,7 +1054,7 @@ final class DownloadCenter {
 
     private func markBrowserSessionRequired(_ item: DownloadItem, message: String) {
         item.taskIdentifier = nil
-        item.status = .browserSessionRequired
+        setStatus(for: item, to: .browserSessionRequired)
         item.progress = 0
         item.bytesWritten = 0
         item.expectedBytes = 0
@@ -1172,7 +1172,7 @@ final class DownloadCenter {
         to status: DownloadStatus
     ) {
         let previousStatus = item.status
-        item.status = status
+        setStatus(for: item, to: status)
 
         guard previousStatus != status,
               status == .completed || status == .failed || status == .cancelled,
@@ -1184,6 +1184,52 @@ final class DownloadCenter {
 
         Task { [notificationService] in
             await notificationService.deliver(payload)
+        }
+    }
+
+    private func setStatus(
+        for item: DownloadItem,
+        to status: DownloadStatus
+    ) {
+        let previousStatus = item.status
+        item.status = status
+
+        guard previousStatus != status,
+              let activityKind = activityKind(from: previousStatus, to: status)
+        else {
+            return
+        }
+
+        item.recordActivity(activityKind)
+    }
+
+    private func activityKind(
+        from previousStatus: DownloadStatus,
+        to status: DownloadStatus
+    ) -> DownloadActivityKind? {
+        switch status {
+        case .queued:
+            .queued
+        case .preparing:
+            previousStatus == .paused || previousStatus == .browserSessionRequired ? .resumed : .started
+        case .downloading:
+            if previousStatus == .paused || previousStatus == .browserSessionRequired {
+                .resumed
+            } else if previousStatus == .queued {
+                .started
+            } else {
+                nil
+            }
+        case .browserSessionRequired:
+            .browserSessionRequired
+        case .paused:
+            .paused
+        case .completed:
+            .completed
+        case .failed:
+            .failed
+        case .cancelled:
+            .cancelled
         }
     }
 
