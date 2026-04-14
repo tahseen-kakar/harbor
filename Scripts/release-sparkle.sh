@@ -15,6 +15,7 @@ PAGES_REMOTE="${PAGES_REMOTE:-origin}"
 UPDATES_SUBDIR="${UPDATES_SUBDIR:-updates}"
 SPARKLE_BIN_DIR="${SPARKLE_BIN_DIR:-}"
 DOWNLOAD_URL_PREFIX="${DOWNLOAD_URL_PREFIX:-https://tahseen-kakar.github.io/harbor/$UPDATES_SUBDIR/}"
+RELEASE_NOTES_URL_PREFIX="${RELEASE_NOTES_URL_PREFIX:-$DOWNLOAD_URL_PREFIX}"
 PUBLIC_FEED_URL="${PUBLIC_FEED_URL:-https://tahseen-kakar.github.io/harbor/appcast.xml}"
 
 if [ ! -d "$APP_PATH" ]; then
@@ -108,6 +109,7 @@ cp "$DMG_PATH" "$UPDATES_DIR/$DMG_NAME"
 echo "Generating Sparkle appcast..."
 "$SPARKLE_BIN_DIR/generate_appcast" \
   --download-url-prefix "$DOWNLOAD_URL_PREFIX" \
+  --release-notes-url-prefix "$RELEASE_NOTES_URL_PREFIX" \
   -o "$PAGES_WORKTREE/appcast.xml" \
   "$UPDATES_DIR"
 
