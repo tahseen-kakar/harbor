@@ -8,7 +8,7 @@
             <sparkle:version>9</sparkle:version>
             <sparkle:shortVersionString>1.2.0</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>15.6</sparkle:minimumSystemVersion>
-            <sparkle:releaseNotesLink>https://tahseen-kakar.github.io/harbor/Harbor-1.2.0.md</sparkle:releaseNotesLink>
+            <sparkle:releaseNotesLink>https://tahseen-kakar.github.io/harbor/updates/Harbor-1.2.0.md</sparkle:releaseNotesLink>
             <enclosure url="https://tahseen-kakar.github.io/harbor/updates/Harbor-1.2.0.dmg" length="7066485" type="application/octet-stream" sparkle:edSignature="WDGlaoWJsE7UxXgRNe3npOAzFAxrna7zQcSfomOMaDr1HouqAfO4/PYeBhfK9tBDgLyMH4SsP8ZOhrgNWRu4AA=="/>
             <sparkle:deltas>
                 <enclosure url="https://tahseen-kakar.github.io/harbor/updates/Harbor9-8.delta" sparkle:deltaFrom="8" length="302882" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977840" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="9YQXxvdswa+Sn2KokW08aT6Vn3cT6FF0IE8p+8Y0gqVvOHDej1zgxL73fulg5qrnzFvZ73RsgypeBwYL7PKiAQ=="/>
