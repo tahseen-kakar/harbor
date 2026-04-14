@@ -8,9 +8,44 @@
 
 /* Begin PBXBuildFile section */
 		0D5F5A5C2F700E1900A1B2C3 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 0D5F5A5B2F700E1900A1B2C3 /* Sparkle */; };
+		0D8F10012F80000000A1B2C3 /* SafariServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0D8F100C2F80000000A1B2C3 /* SafariServices.framework */; };
+		0D8F10022F80000000A1B2C3 /* SafariExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D8F10092F80000000A1B2C3 /* SafariExtensionHandler.swift */; };
+		0D8F10032F80000000A1B2C3 /* script.js in Resources */ = {isa = PBXBuildFile; fileRef = 0D8F100A2F80000000A1B2C3 /* script.js */; };
+		0D8F10042F80000000A1B2C3 /* ToolbarItemIcon.pdf in Resources */ = {isa = PBXBuildFile; fileRef = 0D8F100B2F80000000A1B2C3 /* ToolbarItemIcon.pdf */; };
+		0D8F10052F80000000A1B2C3 /* HarborSafariExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 0D8F100D2F80000000A1B2C3 /* HarborSafariExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		0D8F10062F80000000A1B2C3 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 0DA35C4C2F6338930095E98E /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 0D8F10122F80000000A1B2C3;
+			remoteInfo = "Harbor Safari Extension";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		0D8F10072F80000000A1B2C3 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				0D8F10052F80000000A1B2C3 /* HarborSafariExtension.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		0D8F10082F80000000A1B2C3 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		0D8F10092F80000000A1B2C3 /* SafariExtensionHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariExtensionHandler.swift; sourceTree = "<group>"; };
+		0D8F100A2F80000000A1B2C3 /* script.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = script.js; sourceTree = "<group>"; };
+		0D8F100B2F80000000A1B2C3 /* ToolbarItemIcon.pdf */ = {isa = PBXFileReference; lastKnownFileType = image.pdf; path = ToolbarItemIcon.pdf; sourceTree = "<group>"; };
+		0D8F100C2F80000000A1B2C3 /* SafariServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SafariServices.framework; path = System/Library/Frameworks/SafariServices.framework; sourceTree = SDKROOT; };
+		0D8F100D2F80000000A1B2C3 /* HarborSafariExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = HarborSafariExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		0DA35C542F6338930095E98E /* Harbor.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Harbor.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -36,6 +71,14 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		0D8F10112F80000000A1B2C3 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0D8F10012F80000000A1B2C3 /* SafariServices.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		0DA35C512F6338930095E98E /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -51,14 +94,36 @@
 			isa = PBXGroup;
 			children = (
 				0DA35C562F6338930095E98E /* Harbor */,
+				0D8F100E2F80000000A1B2C3 /* Harbor Safari Extension */,
+				0D8F10102F80000000A1B2C3 /* Frameworks */,
 				0DA35C552F6338930095E98E /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		0D8F100E2F80000000A1B2C3 /* Harbor Safari Extension */ = {
+			isa = PBXGroup;
+			children = (
+				0D8F10082F80000000A1B2C3 /* Info.plist */,
+				0D8F10092F80000000A1B2C3 /* SafariExtensionHandler.swift */,
+				0D8F100A2F80000000A1B2C3 /* script.js */,
+				0D8F100B2F80000000A1B2C3 /* ToolbarItemIcon.pdf */,
+			);
+			path = "Harbor Safari Extension";
+			sourceTree = "<group>";
+		};
+		0D8F10102F80000000A1B2C3 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				0D8F100C2F80000000A1B2C3 /* SafariServices.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 		0DA35C552F6338930095E98E /* Products */ = {
 			isa = PBXGroup;
 			children = (
 				0DA35C542F6338930095E98E /* Harbor.app */,
+				0D8F100D2F80000000A1B2C3 /* HarborSafariExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -75,10 +140,12 @@
 				0DA35C522F6338930095E98E /* Resources */,
 				0DFA3D392F6F7A79006B52A1 /* Copy TorrentRuntime */,
 				0D190F562F6365560036F3C2 /* Sign Embedded Torrent Runtime */,
+				0D8F10072F80000000A1B2C3 /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				0D8F10152F80000000A1B2C3 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				0DA35C562F6338930095E98E /* Harbor */,
@@ -91,6 +158,23 @@
 			productReference = 0DA35C542F6338930095E98E /* Harbor.app */;
 			productType = "com.apple.product-type.application";
 		};
+		0D8F10122F80000000A1B2C3 /* Harbor Safari Extension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0D8F10182F80000000A1B2C3 /* Build configuration list for PBXNativeTarget "Harbor Safari Extension" */;
+			buildPhases = (
+				0D8F10142F80000000A1B2C3 /* Sources */,
+				0D8F10112F80000000A1B2C3 /* Frameworks */,
+				0D8F10132F80000000A1B2C3 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "Harbor Safari Extension";
+			productName = HarborSafariExtension;
+			productReference = 0D8F100D2F80000000A1B2C3 /* HarborSafariExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -101,6 +185,9 @@
 				LastSwiftUpdateCheck = 2630;
 				LastUpgradeCheck = 2630;
 				TargetAttributes = {
+					0D8F10122F80000000A1B2C3 = {
+						CreatedOnToolsVersion = 26.3;
+					};
 					0DA35C532F6338930095E98E = {
 						CreatedOnToolsVersion = 26.3;
 					};
@@ -124,11 +211,21 @@
 			projectRoot = "";
 			targets = (
 				0DA35C532F6338930095E98E /* Harbor */,
+				0D8F10122F80000000A1B2C3 /* Harbor Safari Extension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		0D8F10132F80000000A1B2C3 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0D8F10042F80000000A1B2C3 /* ToolbarItemIcon.pdf in Resources */,
+				0D8F10032F80000000A1B2C3 /* script.js in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		0DA35C522F6338930095E98E /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -181,6 +278,14 @@
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		0D8F10142F80000000A1B2C3 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0D8F10022F80000000A1B2C3 /* SafariExtensionHandler.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		0DA35C502F6338930095E98E /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -189,6 +294,14 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		0D8F10152F80000000A1B2C3 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 0D8F10122F80000000A1B2C3 /* Harbor Safari Extension */;
+			targetProxy = 0D8F10062F80000000A1B2C3 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		0DA35C5D2F6338940095E98E /* Debug */ = {
@@ -309,6 +422,82 @@
 			};
 			name = Release;
 		};
+		0D8F10162F80000000A1B2C3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 8;
+				DEVELOPMENT_TEAM = 2837P98423;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Harbor Safari Extension/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.6;
+				MARKETING_VERSION = 1.1.6;
+				PRODUCT_BUNDLE_IDENTIFIER = co.hapy.harbor.SafariExtension;
+				PRODUCT_BUNDLE_PACKAGE_TYPE = "XPC!";
+				PRODUCT_MODULE_NAME = HarborSafariExtension;
+				PRODUCT_NAME = HarborSafariExtension;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				WRAPPER_EXTENSION = appex;
+			};
+			name = Debug;
+		};
+		0D8F10172F80000000A1B2C3 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 8;
+				DEVELOPMENT_TEAM = 2837P98423;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Harbor Safari Extension/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.6;
+				MARKETING_VERSION = 1.1.6;
+				PRODUCT_BUNDLE_IDENTIFIER = co.hapy.harbor.SafariExtension;
+				PRODUCT_BUNDLE_PACKAGE_TYPE = "XPC!";
+				PRODUCT_MODULE_NAME = HarborSafariExtension;
+				PRODUCT_NAME = HarborSafariExtension;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				WRAPPER_EXTENSION = appex;
+			};
+			name = Release;
+		};
 		0DA35C602F6338940095E98E /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -396,6 +585,15 @@
 			buildConfigurations = (
 				0DA35C602F6338940095E98E /* Debug */,
 				0DA35C612F6338940095E98E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		0D8F10182F80000000A1B2C3 /* Build configuration list for PBXNativeTarget "Harbor Safari Extension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0D8F10162F80000000A1B2C3 /* Debug */,
+				0D8F10172F80000000A1B2C3 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

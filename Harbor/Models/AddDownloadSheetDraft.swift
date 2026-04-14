@@ -66,4 +66,17 @@ struct AddDownloadSheetDraft: Identifiable, Sendable {
             shouldStartImmediately: shouldStartImmediately
         )
     }
+
+    static func sourceURL(
+        _ sourceURL: URL,
+        destinationFolderURL: URL,
+        shouldStartImmediately: Bool
+    ) -> AddDownloadSheetDraft {
+        AddDownloadSheetDraft(
+            entryMode: .linkOrMagnet,
+            sourceURLText: sourceURL.absoluteString,
+            destinationFolderURL: destinationFolderURL,
+            shouldStartImmediately: shouldStartImmediately
+        )
+    }
 }

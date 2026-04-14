@@ -228,8 +228,8 @@ final class DownloadCenter {
         }
 
         hasInstalledExternalOpenHandler = true
-        ExternalTorrentOpenCoordinator.shared.installHandler { [weak self] urls in
-            self?.handleOpenedTorrentFiles(urls)
+        ExternalDownloadOpenCoordinator.shared.installHandler { [weak self] requests in
+            self?.handleOpenedDownloadRequests(requests)
         }
     }
 
@@ -246,10 +246,8 @@ final class DownloadCenter {
         presentNextQueuedExternalAddSheetIfNeeded()
     }
 
-    private func handleOpenedTorrentFiles(_ urls: [URL]) {
-        let drafts = urls
-            .filter { DownloadSourceKind.detect(from: $0) == .torrentFile }
-            .map { makeExternalTorrentDraft(for: $0) }
+    private func handleOpenedDownloadRequests(_ requests: [ExternalDownloadOpenRequest]) {
+        let drafts = requests.compactMap(makeExternalDraft)
 
         guard drafts.isEmpty == false else {
             return
@@ -1145,6 +1143,36 @@ final class DownloadCenter {
             destinationFolderURL: settings.defaultDestinationURL,
             shouldStartImmediately: settings.startDownloadsAutomatically
         )
+    }
+
+    private func makeExternalSourceURLDraft(for sourceURL: URL) -> AddDownloadSheetDraft {
+        AddDownloadSheetDraft.sourceURL(
+            sourceURL,
+            destinationFolderURL: settings.defaultDestinationURL,
+            shouldStartImmediately: settings.startDownloadsAutomatically
+        )
+    }
+
+    private func makeExternalDraft(
+        for request: ExternalDownloadOpenRequest
+    ) -> AddDownloadSheetDraft? {
+        switch request {
+        case let .torrentFile(fileURL):
+            guard DownloadSourceKind.detect(from: fileURL) == .torrentFile else {
+                return nil
+            }
+
+            return makeExternalTorrentDraft(for: fileURL)
+
+        case let .sourceURL(sourceURL):
+            guard let sourceKind = DownloadSourceKind.detect(from: sourceURL),
+                  sourceKind == .directURL || sourceKind == .magnetLink
+            else {
+                return nil
+            }
+
+            return makeExternalSourceURLDraft(for: sourceURL)
+        }
     }
 
     private func transitionStatus(
