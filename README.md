@@ -6,7 +6,7 @@
   <p><strong>A beautiful, fully native macOS download manager built for real Mac workflows.</strong></p>
 
   <p>
-    <a href="https://github.com/tahseen-kakar/harbor/releases/latest">
+    <a href="https://github.com/tahseen-kakar/harbor/releases/latest/download/Harbor.dmg">
       <img src="https://img.shields.io/badge/download-latest%20DMG-007AFF?style=for-the-badge&logo=apple&logoColor=white" alt="Download latest DMG" />
     </a>
   </p>
@@ -55,10 +55,9 @@ If you want a downloader that respects the platform, respects your machine, and 
 
 ## Download
 
-The easiest way to get Harbor is from the latest GitHub release:
+The easiest way to get Harbor is with the latest DMG:
 
-- Open the [latest release](https://github.com/tahseen-kakar/harbor/releases/latest)
-- Download the `.dmg`
+- Download the [latest DMG](https://github.com/tahseen-kakar/harbor/releases/latest/download/Harbor.dmg)
 - Drag `Harbor.app` into `Applications`
 
 Once installed, Harbor can check for new versions from the app menu and update through its built-in Sparkle updater.

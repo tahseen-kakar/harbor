@@ -49,6 +49,8 @@ fi
 RELEASE_TAG="v$VERSION"
 DMG_NAME="$PROJECT_NAME-$VERSION.dmg"
 DMG_PATH="$OUTPUT_DIR/$DMG_NAME"
+LATEST_DMG_NAME="$PROJECT_NAME.dmg"
+LATEST_DMG_PATH="$OUTPUT_DIR/$LATEST_DMG_NAME"
 
 ensure_pages_worktree() {
   mkdir -p "$(dirname "$PAGES_WORKTREE")"
@@ -117,6 +119,8 @@ touch "$PAGES_WORKTREE/.nojekyll"
 
 echo "Uploading DMG to GitHub release..."
 gh release upload "$RELEASE_TAG" "$DMG_PATH" --repo "$GITHUB_REPO" --clobber
+cp "$DMG_PATH" "$LATEST_DMG_PATH"
+gh release upload "$RELEASE_TAG" "$LATEST_DMG_PATH" --repo "$GITHUB_REPO" --clobber
 
 git -C "$PAGES_WORKTREE" add appcast.xml .nojekyll "$UPDATES_SUBDIR"
 
