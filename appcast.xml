@@ -16,6 +16,7 @@
                 <enclosure url="https://tahseen-kakar.github.io/harbor/updates/Harbor11-7.delta" sparkle:deltaFrom="7" length="2168122" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977840" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="zRCYzzvh+870TCCGgrqzb5f0fBauOVDeETiUqVYye/6OpzLYNBbFdPmnSIdGQVnl3nVToPPd2jvDTp2uuIAyDQ=="/>
                 <enclosure url="https://tahseen-kakar.github.io/harbor/updates/Harbor11-6.delta" sparkle:deltaFrom="6" length="2196602" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977840" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="Z+CuVwC2ErHfzVHSfOihwA7BpCHnROERhy3xXrA6ZScswC5mIeLtujBxbJ6UxAx+mcVTb+OACxPHGfxo59SECA=="/>
             </sparkle:deltas>
+            <sparkle:releaseNotesLink>https://tahseen-kakar.github.io/harbor/updates/Harbor-1.2.2.md</sparkle:releaseNotesLink>
         </item>
         <item>
             <title>1.2.1</title>
