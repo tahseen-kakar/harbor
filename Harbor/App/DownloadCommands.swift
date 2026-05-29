@@ -18,6 +18,11 @@ struct DownloadCommands: Commands {
             }
             .keyboardShortcut("n")
 
+            Button("Add from Clipboard") {
+                center.addDownloadSourcesFromPasteboard()
+            }
+            .keyboardShortcut("v", modifiers: [.command, .shift])
+
             Divider()
 
             Button("Pause or Resume Selected") {

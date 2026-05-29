@@ -1,8 +1,10 @@
+import Foundation
 import SwiftUI
 
 struct RootView: View {
     let center: DownloadCenter
     let settings: AppSettingsStore
+    @State private var isDownloadDropTargeted = false
 
     private enum Layout {
         static let sidebarMinWidth: CGFloat = 200
@@ -81,6 +83,50 @@ struct RootView: View {
         }
         .toolbar {
             DownloadToolbarContent(center: center)
+        }
+        .onDrop(
+            of: DownloadSourceImportService.supportedContentTypes,
+            isTargeted: $isDownloadDropTargeted,
+            perform: loadExternalAddSources
+        )
+        .onPasteCommand(of: DownloadSourceImportService.supportedContentTypes) { providers in
+            _ = loadExternalAddSources(providers)
+        }
+        .overlay {
+            if isDownloadDropTargeted {
+                DownloadDropTargetOverlay()
+                    .allowsHitTesting(false)
+            }
+        }
+    }
+
+    private func loadExternalAddSources(_ providers: [NSItemProvider]) -> Bool {
+        DownloadSourceImportService.loadSupportedURLs(from: providers) { urls in
+            center.receiveExternalAddSources(urls)
+        }
+    }
+}
+
+private struct DownloadDropTargetOverlay: View {
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(.black.opacity(0.04))
+
+            Label("Drop to Add Download", systemImage: "arrow.down.doc")
+                .font(.headline)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 12)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(.quaternary)
+                }
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [8, 6]))
+                .padding(14)
         }
     }
 }

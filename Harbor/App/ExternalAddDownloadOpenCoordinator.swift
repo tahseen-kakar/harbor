@@ -12,7 +12,7 @@ final class ExternalAddDownloadOpenCoordinator {
 
     @discardableResult
     func receive(urls: [URL]) -> Bool {
-        let supportedURLs = urls.filter(Self.isSupportedExternalAddURL)
+        let supportedURLs = DownloadSourceImportService.supportedURLs(from: urls)
         guard supportedURLs.isEmpty == false else {
             return false
         }
@@ -26,15 +26,6 @@ final class ExternalAddDownloadOpenCoordinator {
     func installHandler(_ handler: @escaping ([URL]) -> Void) {
         self.handler = handler
         drainPendingURLsIfNeeded()
-    }
-
-    private static func isSupportedExternalAddURL(_ url: URL) -> Bool {
-        switch DownloadSourceKind.detect(from: url) {
-        case .magnetLink, .torrentFile:
-            true
-        case .directURL, nil:
-            false
-        }
     }
 
     private func drainPendingURLsIfNeeded() {

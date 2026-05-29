@@ -262,6 +262,16 @@ final class DownloadCenter {
         presentNextQueuedExternalAddSheetIfNeeded()
     }
 
+    func receiveExternalAddSources(_ urls: [URL]) {
+        handleOpenedExternalAddSources(urls)
+    }
+
+    func addDownloadSourcesFromPasteboard() {
+        receiveExternalAddSources(
+            DownloadSourceImportService.supportedURLs(from: .general)
+        )
+    }
+
     func queueDownload(_ request: AddDownloadRequest) {
         let backend: DownloadBackend = request.sourceKind == .directURL ? .urlSession : .aria2
         let preferredFilename: String?
