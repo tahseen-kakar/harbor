@@ -1,0 +1,4 @@
+- Added multi-select download selection with batch row actions.
+- Added Command-F to focus download search.
+- Added Chinese localization and updated Italian localization.
+- Improved failed download activity timeline error display.
