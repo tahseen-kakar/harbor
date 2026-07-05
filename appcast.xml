@@ -9,7 +9,7 @@
             <sparkle:shortVersionString>1.4.3</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>15.6</sparkle:minimumSystemVersion>
             <sparkle:releaseNotesLink>https://thsnkhn.github.io/harbor/updates/Harbor-1.4.3.md</sparkle:releaseNotesLink>
-            <enclosure url="https://thsnkhn.github.io/harbor/updates/Harbor-1.4.3.dmg" length="183088255" type="application/octet-stream" sparkle:edSignature="7k9PPe0U+H7unnFRF4szlGOYyFWnxkx5zdDvDHvMB9FwTZWuejdL0zkjbLe2ilo4MM5vAeK3ESdxLznaymccAw=="/>
+            <enclosure url="https://github.com/thsnkhn/harbor/releases/download/v1.4.3/Harbor-1.4.3.dmg" length="183088255" type="application/octet-stream" sparkle:edSignature="k4CZOrUCWxIzfaL0FXY1pHCHSyjSE1TLnWw3fWWC9wKB0urpLwMJADY9FvWfFgurzCGAddHBd8CIOu+3ugJxCw=="/>
         </item>
         <item>
             <title>1.4.2</title>
