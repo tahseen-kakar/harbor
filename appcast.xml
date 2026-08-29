@@ -3,6 +3,15 @@
     <channel>
         <title>Harbor</title>
         <item>
+            <title>1.7.0</title>
+            <pubDate>Sat, 29 Aug 2026 16:36:33 +0500</pubDate>
+            <sparkle:version>29</sparkle:version>
+            <sparkle:shortVersionString>1.7.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.6</sparkle:minimumSystemVersion>
+            <sparkle:releaseNotesLink>https://thsnkhn.github.io/harbor/updates/Harbor-1.7.0.md</sparkle:releaseNotesLink>
+            <enclosure url="https://github.com/thsnkhn/harbor/releases/download/v1.7.0/Harbor-1.7.0.dmg" length="185010939" type="application/octet-stream" sparkle:edSignature="oGTBmDosDrWozS8p/4FWtyORXJoPvGgbYx7prDtHyQPtf0ZiOfIrKuEjzhH4gn8JszAu4OFSBhM0JDsdEE6ODA=="/>
+        </item>
+        <item>
             <title>1.6.2</title>
             <pubDate>Mon, 24 Aug 2026 02:30:36 +0500</pubDate>
             <sparkle:version>28</sparkle:version>
@@ -19,15 +28,6 @@
             <sparkle:minimumSystemVersion>15.6</sparkle:minimumSystemVersion>
             <sparkle:releaseNotesLink>https://thsnkhn.github.io/harbor/updates/Harbor-1.6.1.md</sparkle:releaseNotesLink>
             <enclosure url="https://github.com/thsnkhn/harbor/releases/download/v1.6.1/Harbor-1.6.1.dmg" length="183575676" type="application/octet-stream" sparkle:edSignature="NFiifddXxknNygUcNGFVOWZQZqqzlQjGUIid7I8KQjIuIcHKWXm/TtT0UcwT7ibWsery3AKgZGqNwx/75Ly4Ag=="/>
-        </item>
-        <item>
-            <title>1.6.0</title>
-            <pubDate>Mon, 10 Aug 2026 17:08:06 +0500</pubDate>
-            <sparkle:version>26</sparkle:version>
-            <sparkle:shortVersionString>1.6.0</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>15.6</sparkle:minimumSystemVersion>
-            <sparkle:releaseNotesLink>https://thsnkhn.github.io/harbor/updates/Harbor-1.6.0.md</sparkle:releaseNotesLink>
-            <enclosure url="https://github.com/thsnkhn/harbor/releases/download/v1.6.0/Harbor-1.6.0.dmg" length="183581799" type="application/octet-stream" sparkle:edSignature="F7TmjQevBQYiRTvjeJr09SHci4kTHcQMENwdccLmKWY+f+QJljPDwlni49X4ncfoHz9qnHC/dYuC3lEc1PSzAA=="/>
         </item>
     </channel>
 </rss>
