@@ -147,6 +147,28 @@ final class NetworkBindingTests: XCTestCase {
         XCTAssertEqual(pickerTarget.displayName, "ProtonVPN (unavailable)")
     }
 
+    func testIPv4EntriesResolveToABinding() {
+        XCTAssertEqual(
+            SystemNetworkBindingCatalog.binding(
+                fromIPv4Entry: ["InterfaceName": "utun4", "Addresses": ["10.2.0.2"]]
+            ),
+            ResolvedNetworkBinding(interfaceName: "utun4", ipv4Address: "10.2.0.2")
+        )
+
+        // A service that is configured but not up carries no interface.
+        XCTAssertNil(SystemNetworkBindingCatalog.binding(fromIPv4Entry: [:]))
+        XCTAssertNil(
+            SystemNetworkBindingCatalog.binding(fromIPv4Entry: ["InterfaceName": ""])
+        )
+
+        // An interface without an address still binds; aria2 resolves the
+        // family itself.
+        XCTAssertEqual(
+            SystemNetworkBindingCatalog.binding(fromIPv4Entry: ["InterfaceName": "en0"]),
+            ResolvedNetworkBinding(interfaceName: "en0", ipv4Address: nil)
+        )
+    }
+
     func testOnlyUsableInterfacesAreOffered() {
         for name in ["en0", "en5", "utun4", "bridge0", "ppp0"] {
             XCTAssertTrue(

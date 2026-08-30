@@ -68,9 +68,15 @@ nonisolated struct SystemNetworkBindingCatalog: NetworkBindingCataloging {
         }
     }
 
-    /// A VPN service has no BSD interface until it connects. The dynamic store
-    /// publishes the interface it landed on for the duration of the connection.
+    /// A service has no BSD interface until it is up, and a VPN lands on a
+    /// different `utunN` on every connection.
     private func resolveService(id: String) -> ResolvedNetworkBinding? {
+        dynamicStoreBinding(serviceID: id) ?? vpnConnectionBinding(serviceID: id)
+    }
+
+    /// Wired and wireless services publish their live address under their own
+    /// configured identifier.
+    private func dynamicStoreBinding(serviceID: String) -> ResolvedNetworkBinding? {
         guard let store = SCDynamicStoreCreate(
             nil,
             "Harbor.NetworkBindingCatalog" as CFString,
@@ -79,10 +85,36 @@ nonisolated struct SystemNetworkBindingCatalog: NetworkBindingCataloging {
         ),
         let entry = SCDynamicStoreCopyValue(
             store,
-            "State:/Network/Service/\(id)/IPv4" as CFString
-        ) as? [String: Any],
-        let interfaceName = entry["InterfaceName"] as? String,
-        interfaceName.isEmpty == false else {
+            "State:/Network/Service/\(serviceID)/IPv4" as CFString
+        ) as? [String: Any] else {
+            return nil
+        }
+
+        return Self.binding(fromIPv4Entry: entry)
+    }
+
+    /// A VPN publishes its address under a per-session identifier that has no
+    /// link back to the configured service, so the dynamic store cannot answer
+    /// for it. SCNetworkConnection reports the same information for the stable
+    /// service identifier the selection stores.
+    private func vpnConnectionBinding(serviceID: String) -> ResolvedNetworkBinding? {
+        guard let connection = SCNetworkConnectionCreateWithServiceID(
+            nil,
+            serviceID as CFString,
+            nil,
+            nil
+        ),
+        let status = SCNetworkConnectionCopyExtendedStatus(connection) as? [String: Any],
+        let ipv4Entry = status["IPv4"] as? [String: Any] else {
+            return nil
+        }
+
+        return Self.binding(fromIPv4Entry: ipv4Entry)
+    }
+
+    static func binding(fromIPv4Entry entry: [String: Any]) -> ResolvedNetworkBinding? {
+        guard let interfaceName = entry["InterfaceName"] as? String,
+              interfaceName.isEmpty == false else {
             return nil
         }
 
