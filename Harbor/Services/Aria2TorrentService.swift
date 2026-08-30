@@ -8,6 +8,7 @@ enum TorrentEngineError: LocalizedError {
     case invalidSource
     case invalidResponse
     case rpc(String)
+    case networkInterfaceUnavailable(String)
 
     var errorDescription: String? {
         switch self {
@@ -21,6 +22,12 @@ enum TorrentEngineError: LocalizedError {
             "The torrent engine returned an invalid response."
         case let .rpc(message):
             message
+        case let .networkInterfaceUnavailable(displayName):
+            """
+            Harbor can’t transfer torrents because the network \(displayName) \
+            isn’t available. Reconnect it, or choose a different network \
+            interface in Settings › Torrents.
+            """
         }
     }
 }
@@ -285,6 +292,7 @@ actor Aria2TorrentService {
     private let daemonStartupOperation: DaemonStartupOperation
     private let startupLogBuffer = TorrentEngineLogBuffer()
     private var transferSettings: DownloadTransferSettings
+    private var networkBinding: NetworkBindingStatus = .unrestricted
     private var isRetryingAfterSessionRecovery = false
 
     init(
@@ -311,6 +319,24 @@ actor Aria2TorrentService {
 
     func resolvedBinaryPath() -> String? {
         Aria2BinaryResolver.resolveBinaryURL()?.path
+    }
+
+    /// aria2 fixes `--interface` at launch and caches the address it resolves
+    /// to, so a changed binding can only be applied by restarting the daemon.
+    func setNetworkBinding(_ networkBinding: NetworkBindingStatus) async {
+        guard self.networkBinding != networkBinding else {
+            return
+        }
+        self.networkBinding = networkBinding
+
+        guard let process, process.isRunning else {
+            return
+        }
+
+        // Persist first so the restart, or the refusal to restart while the
+        // interface is gone, keeps every torrent recoverable.
+        try? await saveSession()
+        resetDaemon(terminateIfRunning: true)
     }
 
     func updateTransferSettings(
@@ -917,6 +943,11 @@ actor Aria2TorrentService {
     }
 
     private func startDaemonUntilReady() async throws {
+        // aria2 exits immediately when --interface names a missing interface.
+        // Refusing here turns that into an explanation the user can act on.
+        if case let .unavailable(displayName) = networkBinding {
+            throw TorrentEngineError.networkInterfaceUnavailable(displayName)
+        }
 
         if process != nil || rpcPort != nil || rpcSecret != nil || stderrPipe != nil {
             resetDaemon(terminateIfRunning: process?.isRunning == true)
@@ -935,39 +966,14 @@ actor Aria2TorrentService {
 
         let port = Int.random(in: 18_000 ... 28_000)
         let secret = UUID().uuidString.replacingOccurrences(of: "-", with: "")
-        var arguments = [
-            "--enable-rpc=true",
-            "--rpc-listen-all=false",
-            "--rpc-listen-port=\(port)",
-            "--rpc-secret=\(secret)",
-            "--input-file=\(sessionFileURL.path)",
-            "--save-session=\(sessionFileURL.path)",
-            "--save-session-interval=5",
-            "--force-save=true",
-            "--stop-with-process=\(ProcessInfo.processInfo.processIdentifier)",
-            "--bt-detach-seed-only=true",
-            // Per-download options override this unlimited daemon default.
-            // TODO: Add per-torrent ratio overrides if one global preference becomes too limiting.
-            "--seed-ratio=0.0",
-            "--bt-save-metadata=true",
-            "--bt-load-saved-metadata=true",
-            "--follow-torrent=true",
-            "--pause=true",
-            "--allow-overwrite=false",
-            "--auto-file-renaming=true"
-        ]
-        arguments.append(contentsOf: [
-            "--summary-interval=0",
-            "--max-concurrent-downloads=\(transferSettings.maxConcurrentDownloads)",
-            "--max-overall-download-limit=\(Self.aria2LimitString(transferSettings.globalSpeedLimitBytesPerSecond))",
-            "--max-overall-upload-limit=\(Self.aria2LimitString(transferSettings.globalUploadSpeedLimitBytesPerSecond))",
-            "--max-download-limit=\(Self.aria2LimitString(transferSettings.perDownloadSpeedLimitBytesPerSecond))",
-            "--max-upload-limit=\(Self.aria2LimitString(transferSettings.perDownloadUploadSpeedLimitBytesPerSecond))",
-            "--max-connection-per-server=\(transferSettings.perDownloadConnectionCount)",
-            "--split=\(transferSettings.perDownloadConnectionCount)",
-            "--check-certificate=true",
-            "--console-log-level=notice"
-        ])
+        let arguments = Self.daemonArguments(
+            sessionFilePath: sessionFileURL.path,
+            rpcPort: port,
+            rpcSecret: secret,
+            hostProcessIdentifier: ProcessInfo.processInfo.processIdentifier,
+            transferSettings: transferSettings,
+            networkBinding: networkBinding
+        )
 
         let process = Process()
         process.executableURL = binaryURL
@@ -1045,6 +1051,57 @@ actor Aria2TorrentService {
             return
         }
         throw TorrentEngineError.startupFailed("Timed out waiting for aria2 RPC.")
+    }
+
+    nonisolated static func daemonArguments(
+        sessionFilePath: String,
+        rpcPort: Int,
+        rpcSecret: String,
+        hostProcessIdentifier: pid_t,
+        transferSettings: DownloadTransferSettings,
+        networkBinding: NetworkBindingStatus
+    ) -> [String] {
+        var arguments = [
+            "--enable-rpc=true",
+            "--rpc-listen-all=false",
+            "--rpc-listen-port=\(rpcPort)",
+            "--rpc-secret=\(rpcSecret)",
+            "--input-file=\(sessionFilePath)",
+            "--save-session=\(sessionFilePath)",
+            "--save-session-interval=5",
+            "--force-save=true",
+            "--stop-with-process=\(hostProcessIdentifier)",
+            "--bt-detach-seed-only=true",
+            // Per-download options override this unlimited daemon default.
+            // TODO: Add per-torrent ratio overrides if one global preference becomes too limiting.
+            "--seed-ratio=0.0",
+            "--bt-save-metadata=true",
+            "--bt-load-saved-metadata=true",
+            "--follow-torrent=true",
+            "--pause=true",
+            "--allow-overwrite=false",
+            "--auto-file-renaming=true"
+        ]
+        arguments.append(contentsOf: [
+            "--summary-interval=0",
+            "--max-concurrent-downloads=\(transferSettings.maxConcurrentDownloads)",
+            "--max-overall-download-limit=\(aria2LimitString(transferSettings.globalSpeedLimitBytesPerSecond))",
+            "--max-overall-upload-limit=\(aria2LimitString(transferSettings.globalUploadSpeedLimitBytesPerSecond))",
+            "--max-download-limit=\(aria2LimitString(transferSettings.perDownloadSpeedLimitBytesPerSecond))",
+            "--max-upload-limit=\(aria2LimitString(transferSettings.perDownloadUploadSpeedLimitBytesPerSecond))",
+            "--max-connection-per-server=\(transferSettings.perDownloadConnectionCount)",
+            "--split=\(transferSettings.perDownloadConnectionCount)",
+            "--check-certificate=true",
+            "--console-log-level=notice"
+        ])
+
+        // Local Peer Discovery stays off by default in aria2, so --interface is
+        // the only socket binding the daemon needs.
+        if case let .bound(_, binding) = networkBinding {
+            arguments.append("--interface=\(binding.interfaceName)")
+        }
+
+        return arguments
     }
 
     private func recoverCorruptSessionIfPossible(

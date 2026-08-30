@@ -65,6 +65,36 @@ struct TorrentsSettingsTab: View {
         @Bindable var settings = settings
 
         Form {
+            Section("Network") {
+                Picker("Network Interface", selection: $settings.networkBindingSelection) {
+                    Text(NetworkBindingTarget.any.displayName)
+                        .tag(NetworkBindingSelection.any)
+
+                    if serviceTargets.isEmpty == false {
+                        Divider()
+                        ForEach(serviceTargets) { target in
+                            Text(target.displayName).tag(target.selection)
+                        }
+                    }
+
+                    if interfaceTargets.isEmpty == false {
+                        Divider()
+                        ForEach(interfaceTargets) { target in
+                            Text(target.displayName).tag(target.selection)
+                        }
+                    }
+                }
+                .accessibilityIdentifier(HarborAccessibility.settingsNetworkInterfacePicker)
+
+                if settings.networkBindingSelection != .any {
+                    NetworkBindingStatusRow(status: settings.networkBindingStatus)
+                }
+
+                Text("Torrent traffic uses only the selected interface. While that interface is unavailable, Harbor pauses every torrent and resumes it once the interface returns. Regular and media downloads are not affected.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Automation") {
                 Toggle("Watch a folder for torrent files", isOn: $settings.torrentWatchFolderEnabled)
 
@@ -110,12 +140,23 @@ struct TorrentsSettingsTab: View {
             }
         }
         .formStyle(.grouped)
+        .onAppear {
+            settings.refreshNetworkBindingTargets()
+        }
         .onChange(of: settings.stopSeedingRatio) { _, value in
             let clampedValue = AppSettingsStore.clampedSeedingRatio(value)
             if clampedValue != value {
                 settings.stopSeedingRatio = clampedValue
             }
         }
+    }
+
+    private var serviceTargets: [NetworkBindingTarget] {
+        settings.networkBindingPickerTargets.filter { $0.kind == .service }
+    }
+
+    private var interfaceTargets: [NetworkBindingTarget] {
+        settings.networkBindingPickerTargets.filter { $0.kind == .interface }
     }
 }
 
@@ -289,6 +330,61 @@ private struct TorrentWatchStatusRow: View {
         case .stopped:
             .secondary
         case .watching:
+            .green
+        case .unavailable:
+            .orange
+        }
+    }
+}
+
+private struct NetworkBindingStatusRow: View {
+    let status: NetworkBindingStatus
+
+    var body: some View {
+        LabeledContent("Status") {
+            Label(message, systemImage: symbolName)
+                .foregroundStyle(foregroundStyle)
+        }
+    }
+
+    private var message: String {
+        switch status {
+        case .unrestricted:
+            String(localized: "No interface restriction")
+        case let .bound(_, binding):
+            if let ipv4Address = binding.ipv4Address {
+                String(
+                    format: String(localized: "Bound to %1$@ (%2$@)"),
+                    binding.interfaceName,
+                    ipv4Address
+                )
+            } else {
+                String(format: String(localized: "Bound to %@"), binding.interfaceName)
+            }
+        case let .unavailable(displayName):
+            String(
+                format: String(localized: "%@ is unavailable; torrents are paused"),
+                displayName
+            )
+        }
+    }
+
+    private var symbolName: String {
+        switch status {
+        case .unrestricted:
+            "circle"
+        case .bound:
+            "checkmark.shield"
+        case .unavailable:
+            "exclamationmark.triangle"
+        }
+    }
+
+    private var foregroundStyle: Color {
+        switch status {
+        case .unrestricted:
+            .secondary
+        case .bound:
             .green
         case .unavailable:
             .orange
