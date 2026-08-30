@@ -42,7 +42,7 @@ nonisolated struct SystemNetworkBindingCatalog: NetworkBindingCataloging {
             return []
         }
 
-        return services.compactMap { service -> NetworkBindingTarget? in
+        let targets = services.compactMap { service -> NetworkBindingTarget? in
             guard SCNetworkServiceGetEnabled(service),
                   let id = SCNetworkServiceGetServiceID(service) as String?,
                   let name = SCNetworkServiceGetName(service) as String?,
@@ -57,17 +57,19 @@ nonisolated struct SystemNetworkBindingCatalog: NetworkBindingCataloging {
                 selection: .service(id: id),
                 displayName: name,
                 kind: .service,
-                symbolName: Self.symbolName(forInterfaceType: interfaceType)
+                medium: Self.medium(forInterfaceType: interfaceType)
             )
         }
+
+        return NetworkBindingTarget.sortedByMedium(targets)
     }
 
     /// macOS reports what a service runs over, which is the only reliable way
     /// to tell a VPN from an ordinary connection: a VPN has no BSD name until
     /// it connects, and its flags match a real adapter's once it does.
-    static func symbolName(forInterfaceType interfaceType: String?) -> String {
+    static func medium(forInterfaceType interfaceType: String?) -> NetworkBindingMedium {
         guard let interfaceType else {
-            return "network"
+            return .other
         }
 
         // SystemConfiguration exports no constant for the type a
@@ -88,26 +90,57 @@ nonisolated struct SystemNetworkBindingCatalog: NetworkBindingCataloging {
         ]
 
         if tunnelTypes.contains(interfaceType) {
-            return "lock.shield"
+            return .vpn
         }
         if interfaceType == kSCNetworkInterfaceTypeIEEE80211 as String {
-            return "wifi"
+            return .wireless
         }
         if wiredTypes.contains(interfaceType) {
-            return "cable.connector"
+            return .wired
         }
-        return "network"
+        return .other
     }
 
     private func interfaceTargets() -> [NetworkBindingTarget] {
-        Self.interfaceNames().map { name in
+        let mediums = Self.interfaceMediums()
+
+        let targets = Self.interfaceNames().map { name in
             NetworkBindingTarget(
                 selection: .interface(name: name),
                 displayName: name,
                 kind: .interface,
-                symbolName: name.hasPrefix("utun") ? "lock.shield" : "network"
+                medium: mediums[name] ?? Self.medium(forInterfaceName: name)
             )
         }
+
+        return NetworkBindingTarget.sortedByMedium(targets)
+    }
+
+    /// What every adapter macOS knows about runs over, keyed by BSD name. This
+    /// is what tells `en0` (Wi-Fi) from `en5` (a USB Ethernet adapter), which
+    /// the name alone never reveals.
+    private static func interfaceMediums() -> [String: NetworkBindingMedium] {
+        guard let interfaces = SCNetworkInterfaceCopyAll() as? [SCNetworkInterface] else {
+            return [:]
+        }
+
+        return interfaces.reduce(into: [:]) { mediums, interface in
+            guard let bsdName = SCNetworkInterfaceGetBSDName(interface) as String? else {
+                return
+            }
+
+            mediums[bsdName] = medium(
+                forInterfaceType: SCNetworkInterfaceGetInterfaceType(interface) as String?
+            )
+        }
+    }
+
+    /// A tunnel has no SCNetworkInterface — it exists only while it is up — so
+    /// its name is all there is to classify it by.
+    static func medium(forInterfaceName name: String) -> NetworkBindingMedium {
+        let tunnelBaseNames: Set<String> = ["utun", "ipsec", "ppp", "tun", "tap"]
+        let baseName = String(name.prefix { $0.isNumber == false })
+        return tunnelBaseNames.contains(baseName) ? .vpn : .other
     }
 
     /// A service has no BSD interface until it is up, and a VPN lands on a

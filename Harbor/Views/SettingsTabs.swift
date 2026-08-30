@@ -74,18 +74,20 @@ struct TorrentsSettingsTab: View {
                     .tag(NetworkBindingSelection.any)
 
                     if serviceTargets.isEmpty == false {
-                        Divider()
-                        ForEach(serviceTargets) { target in
-                            Label(target.displayName, systemImage: target.symbolName)
-                                .tag(target.selection)
+                        Section("Services") {
+                            ForEach(serviceTargets) { target in
+                                Label(target.displayName, systemImage: target.symbolName)
+                                    .tag(target.selection)
+                            }
                         }
                     }
 
                     if interfaceTargets.isEmpty == false {
-                        Divider()
-                        ForEach(interfaceTargets) { target in
-                            Label(target.displayName, systemImage: target.symbolName)
-                                .tag(target.selection)
+                        Section("Interfaces") {
+                            ForEach(interfaceTargets) { target in
+                                Label(target.displayName, systemImage: target.symbolName)
+                                    .tag(target.selection)
+                            }
                         }
                     }
                 }

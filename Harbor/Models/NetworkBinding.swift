@@ -47,25 +47,55 @@ nonisolated enum NetworkBindingTargetKind: Equatable, Sendable {
     case interface
 }
 
+/// What a target carries its traffic over. The case order is the order the
+/// picker groups by: a VPN is the reason this setting exists, so it leads.
+nonisolated enum NetworkBindingMedium: Int, Comparable, Sendable {
+    case vpn
+    case wireless
+    case wired
+    case other
+
+    var symbolName: String {
+        switch self {
+        case .vpn:
+            "lock.shield"
+        case .wireless:
+            "wifi"
+        case .wired:
+            "cable.connector"
+        case .other:
+            "network"
+        }
+    }
+
+    static func < (lhs: Self, rhs: Self) -> Bool {
+        lhs.rawValue < rhs.rawValue
+    }
+}
+
 nonisolated struct NetworkBindingTarget: Identifiable, Equatable, Sendable {
     let selection: NetworkBindingSelection
     let displayName: String
     let kind: NetworkBindingTargetKind
-    /// Tells a VPN apart from an ordinary connection at a glance.
-    let symbolName: String
+    let medium: NetworkBindingMedium
 
     var id: String { selection.storageValue }
+
+    /// Tells a VPN apart from an ordinary connection at a glance.
+    var symbolName: String {
+        kind == .any ? "circle.dashed" : medium.symbolName
+    }
 
     init(
         selection: NetworkBindingSelection,
         displayName: String,
         kind: NetworkBindingTargetKind,
-        symbolName: String = "network"
+        medium: NetworkBindingMedium = .other
     ) {
         self.selection = selection
         self.displayName = displayName
         self.kind = kind
-        self.symbolName = symbolName
+        self.medium = medium
     }
 
     static let any = NetworkBindingTarget(
@@ -75,9 +105,19 @@ nonisolated struct NetworkBindingTarget: Identifiable, Equatable, Sendable {
             defaultValue: "Automatic",
             comment: "Torrent network binding option that applies no interface restriction."
         ),
-        kind: .any,
-        symbolName: "circle.dashed"
+        kind: .any
     )
+
+    /// Groups entries by what they run over and sorts each group the way the
+    /// Finder sorts names, so `en2` stays ahead of `en10`.
+    static func sortedByMedium(_ targets: [NetworkBindingTarget]) -> [NetworkBindingTarget] {
+        targets.sorted { lhs, rhs in
+            guard lhs.medium == rhs.medium else {
+                return lhs.medium < rhs.medium
+            }
+            return lhs.displayName.localizedStandardCompare(rhs.displayName) == .orderedAscending
+        }
+    }
 }
 
 /// The interface a selection currently points at.

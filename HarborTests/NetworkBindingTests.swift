@@ -72,6 +72,18 @@ private func makeVPNCatalog(
     )
 }
 
+private func makeInterfaceTarget(
+    name: String,
+    medium: NetworkBindingMedium
+) -> NetworkBindingTarget {
+    NetworkBindingTarget(
+        selection: .interface(name: name),
+        displayName: name,
+        kind: .interface,
+        medium: medium
+    )
+}
+
 @MainActor
 final class NetworkBindingTests: XCTestCase {
     func testSelectionRoundTripsThroughStorageValue() {
@@ -170,27 +182,48 @@ final class NetworkBindingTests: XCTestCase {
     }
 
     func testVPNServicesAreDistinguishableFromOrdinaryConnections() {
+        XCTAssertEqual(SystemNetworkBindingCatalog.medium(forInterfaceType: "VPN"), .vpn)
+        XCTAssertEqual(SystemNetworkBindingCatalog.medium(forInterfaceType: "IPSec"), .vpn)
         XCTAssertEqual(
-            SystemNetworkBindingCatalog.symbolName(forInterfaceType: "VPN"),
-            "lock.shield"
+            SystemNetworkBindingCatalog.medium(forInterfaceType: "IEEE80211"),
+            .wireless
         )
         XCTAssertEqual(
-            SystemNetworkBindingCatalog.symbolName(forInterfaceType: "IPSec"),
-            "lock.shield"
+            SystemNetworkBindingCatalog.medium(forInterfaceType: "Ethernet"),
+            .wired
         )
-        XCTAssertEqual(
-            SystemNetworkBindingCatalog.symbolName(forInterfaceType: "IEEE80211"),
-            "wifi"
-        )
-        XCTAssertEqual(
-            SystemNetworkBindingCatalog.symbolName(forInterfaceType: "Ethernet"),
-            "cable.connector"
-        )
+        XCTAssertEqual(SystemNetworkBindingCatalog.medium(forInterfaceType: "Bridge"), .wired)
         // A service macOS cannot classify still gets a usable icon.
+        XCTAssertEqual(SystemNetworkBindingCatalog.medium(forInterfaceType: nil), .other)
+        XCTAssertEqual(NetworkBindingMedium.other.symbolName, "network")
+        XCTAssertEqual(NetworkBindingMedium.vpn.symbolName, "lock.shield")
+    }
+
+    /// A tunnel is the point of this setting, so it has to lead the list even
+    /// though its name sorts last.
+    func testTargetsAreGroupedByMediumBeforeName() {
+        let targets = NetworkBindingTarget.sortedByMedium([
+            makeInterfaceTarget(name: "en10", medium: .wired),
+            makeInterfaceTarget(name: "en2", medium: .wired),
+            makeInterfaceTarget(name: "utun4", medium: .vpn),
+            makeInterfaceTarget(name: "bridge0", medium: .other),
+            makeInterfaceTarget(name: "en0", medium: .wireless),
+            makeInterfaceTarget(name: "utun0", medium: .vpn)
+        ])
+
         XCTAssertEqual(
-            SystemNetworkBindingCatalog.symbolName(forInterfaceType: nil),
-            "network"
+            targets.map(\.displayName),
+            ["utun0", "utun4", "en0", "en2", "en10", "bridge0"]
         )
+    }
+
+    /// macOS has no SCNetworkInterface for a tunnel that is not up, so the name
+    /// carries the classification on its own.
+    func testTunnelInterfacesAreClassifiedByName() {
+        XCTAssertEqual(SystemNetworkBindingCatalog.medium(forInterfaceName: "utun4"), .vpn)
+        XCTAssertEqual(SystemNetworkBindingCatalog.medium(forInterfaceName: "ipsec0"), .vpn)
+        XCTAssertEqual(SystemNetworkBindingCatalog.medium(forInterfaceName: "ppp0"), .vpn)
+        XCTAssertEqual(SystemNetworkBindingCatalog.medium(forInterfaceName: "en0"), .other)
     }
 
     func testOnlyUsableInterfacesAreOffered() {
