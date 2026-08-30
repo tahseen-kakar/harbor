@@ -50,6 +50,6 @@ final class HarborSettingsUITests: HarborUITestCase {
 
         let interfacePicker = app.popUpButtons["settings.torrents.networkInterface"].firstMatch
         XCTAssertTrue(interfacePicker.waitForExistence(timeout: 10))
-        XCTAssertEqual(String(describing: interfacePicker.value), "Any Interface")
+        XCTAssertEqual(String(describing: interfacePicker.value), "Automatic")
     }
 }

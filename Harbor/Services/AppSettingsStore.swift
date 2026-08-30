@@ -553,7 +553,7 @@ final class AppSettingsStore {
     }
 
     /// Keeps a selection that has disappeared, such as a removed VPN service,
-    /// visible in the picker instead of silently reverting to "Any Interface".
+    /// visible in the picker instead of silently reverting to "Automatic".
     var networkBindingPickerTargets: [NetworkBindingTarget] {
         var targets = availableNetworkBindingTargets
         guard targets.contains(where: { $0.selection == networkBindingSelection }) == false else {

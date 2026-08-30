@@ -16,7 +16,7 @@ nonisolated enum NetworkBindingSelection: Hashable, Sendable {
     }
 
     /// The `UserDefaults` representation. `.any` is stored as an empty string so
-    /// an absent preference and an explicit "Any Interface" agree.
+    /// an absent preference and an explicit "Automatic" agree.
     var storageValue: String {
         switch self {
         case .any:
@@ -72,7 +72,7 @@ nonisolated struct NetworkBindingTarget: Identifiable, Equatable, Sendable {
         selection: .any,
         displayName: String(
             localized: "network.binding.any",
-            defaultValue: "Any Interface",
+            defaultValue: "Automatic",
             comment: "Torrent network binding option that applies no interface restriction."
         ),
         kind: .any,
