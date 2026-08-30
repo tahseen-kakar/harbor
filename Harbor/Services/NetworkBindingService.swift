@@ -50,12 +50,53 @@ nonisolated struct SystemNetworkBindingCatalog: NetworkBindingCataloging {
                 return nil
             }
 
+            let interfaceType = SCNetworkServiceGetInterface(service)
+                .flatMap { SCNetworkInterfaceGetInterfaceType($0) as String? }
+
             return NetworkBindingTarget(
                 selection: .service(id: id),
                 displayName: name,
-                kind: .service
+                kind: .service,
+                symbolName: Self.symbolName(forInterfaceType: interfaceType)
             )
         }
+    }
+
+    /// macOS reports what a service runs over, which is the only reliable way
+    /// to tell a VPN from an ordinary connection: a VPN has no BSD name until
+    /// it connects, and its flags match a real adapter's once it does.
+    static func symbolName(forInterfaceType interfaceType: String?) -> String {
+        guard let interfaceType else {
+            return "network"
+        }
+
+        // SystemConfiguration exports no constant for the type a
+        // NetworkExtension VPN or a Thunderbolt bridge reports, so those two
+        // are matched by the value macOS returns.
+        let tunnelTypes: Set<String> = [
+            "VPN",
+            kSCNetworkInterfaceTypeIPSec as String,
+            kSCNetworkInterfaceTypePPP as String,
+            kSCNetworkInterfaceTypeL2TP as String,
+            kSCNetworkInterfaceTypePPTP as String
+        ]
+        let wiredTypes: Set<String> = [
+            "Bridge",
+            kSCNetworkInterfaceTypeEthernet as String,
+            kSCNetworkInterfaceTypeBond as String,
+            kSCNetworkInterfaceTypeVLAN as String
+        ]
+
+        if tunnelTypes.contains(interfaceType) {
+            return "lock.shield"
+        }
+        if interfaceType == kSCNetworkInterfaceTypeIEEE80211 as String {
+            return "wifi"
+        }
+        if wiredTypes.contains(interfaceType) {
+            return "cable.connector"
+        }
+        return "network"
     }
 
     private func interfaceTargets() -> [NetworkBindingTarget] {
@@ -63,7 +104,8 @@ nonisolated struct SystemNetworkBindingCatalog: NetworkBindingCataloging {
             NetworkBindingTarget(
                 selection: .interface(name: name),
                 displayName: name,
-                kind: .interface
+                kind: .interface,
+                symbolName: name.hasPrefix("utun") ? "lock.shield" : "network"
             )
         }
     }

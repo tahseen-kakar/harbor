@@ -51,8 +51,22 @@ nonisolated struct NetworkBindingTarget: Identifiable, Equatable, Sendable {
     let selection: NetworkBindingSelection
     let displayName: String
     let kind: NetworkBindingTargetKind
+    /// Tells a VPN apart from an ordinary connection at a glance.
+    let symbolName: String
 
     var id: String { selection.storageValue }
+
+    init(
+        selection: NetworkBindingSelection,
+        displayName: String,
+        kind: NetworkBindingTargetKind,
+        symbolName: String = "network"
+    ) {
+        self.selection = selection
+        self.displayName = displayName
+        self.kind = kind
+        self.symbolName = symbolName
+    }
 
     static let any = NetworkBindingTarget(
         selection: .any,
@@ -61,7 +75,8 @@ nonisolated struct NetworkBindingTarget: Identifiable, Equatable, Sendable {
             defaultValue: "Any Interface",
             comment: "Torrent network binding option that applies no interface restriction."
         ),
-        kind: .any
+        kind: .any,
+        symbolName: "circle.dashed"
     )
 }
 

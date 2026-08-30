@@ -169,6 +169,30 @@ final class NetworkBindingTests: XCTestCase {
         )
     }
 
+    func testVPNServicesAreDistinguishableFromOrdinaryConnections() {
+        XCTAssertEqual(
+            SystemNetworkBindingCatalog.symbolName(forInterfaceType: "VPN"),
+            "lock.shield"
+        )
+        XCTAssertEqual(
+            SystemNetworkBindingCatalog.symbolName(forInterfaceType: "IPSec"),
+            "lock.shield"
+        )
+        XCTAssertEqual(
+            SystemNetworkBindingCatalog.symbolName(forInterfaceType: "IEEE80211"),
+            "wifi"
+        )
+        XCTAssertEqual(
+            SystemNetworkBindingCatalog.symbolName(forInterfaceType: "Ethernet"),
+            "cable.connector"
+        )
+        // A service macOS cannot classify still gets a usable icon.
+        XCTAssertEqual(
+            SystemNetworkBindingCatalog.symbolName(forInterfaceType: nil),
+            "network"
+        )
+    }
+
     func testOnlyUsableInterfacesAreOffered() {
         for name in ["en0", "en5", "utun4", "bridge0", "ppp0"] {
             XCTAssertTrue(

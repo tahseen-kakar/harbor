@@ -67,20 +67,25 @@ struct TorrentsSettingsTab: View {
         Form {
             Section("Network") {
                 Picker("Network Interface", selection: $settings.networkBindingSelection) {
-                    Text(NetworkBindingTarget.any.displayName)
-                        .tag(NetworkBindingSelection.any)
+                    Label(
+                        NetworkBindingTarget.any.displayName,
+                        systemImage: NetworkBindingTarget.any.symbolName
+                    )
+                    .tag(NetworkBindingSelection.any)
 
                     if serviceTargets.isEmpty == false {
                         Divider()
                         ForEach(serviceTargets) { target in
-                            Text(target.displayName).tag(target.selection)
+                            Label(target.displayName, systemImage: target.symbolName)
+                                .tag(target.selection)
                         }
                     }
 
                     if interfaceTargets.isEmpty == false {
                         Divider()
                         ForEach(interfaceTargets) { target in
-                            Text(target.displayName).tag(target.selection)
+                            Label(target.displayName, systemImage: target.symbolName)
+                                .tag(target.selection)
                         }
                     }
                 }
