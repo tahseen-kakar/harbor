@@ -74,13 +74,13 @@ nonisolated struct SystemNetworkBindingCatalog: NetworkBindingCataloging {
 
         // SystemConfiguration exports no constant for the type a
         // NetworkExtension VPN or a Thunderbolt bridge reports, so those two
-        // are matched by the value macOS returns.
+        // are matched by the value macOS returns. PPTP is left out: macOS
+        // dropped it in 10.12, long before this app's deployment target.
         let tunnelTypes: Set<String> = [
             "VPN",
             kSCNetworkInterfaceTypeIPSec as String,
             kSCNetworkInterfaceTypePPP as String,
-            kSCNetworkInterfaceTypeL2TP as String,
-            kSCNetworkInterfaceTypePPTP as String
+            kSCNetworkInterfaceTypeL2TP as String
         ]
         let wiredTypes: Set<String> = [
             "Bridge",
