@@ -130,9 +130,6 @@ final class DownloadCenter {
     @ObservationIgnored private var torrentStartTasks: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var torrentPauseTasks: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var networkBindingTask: Task<Void, Never>?
-    /// Downloads Harbor paused because the bound interface disappeared. Kept in
-    /// memory so a manual pause is never mistaken for one of these.
-    @ObservationIgnored private var networkSuspendedDownloadIDs: Set<UUID> = []
     @ObservationIgnored private var torrentStopSeedingTasks: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var pendingTorrentPauseIDs: Set<UUID> = []
     @ObservationIgnored private var pendingTorrentSeedingRestartIDs: Set<UUID> = []
@@ -427,6 +424,9 @@ final class DownloadCenter {
                 }
 
             downloads = restoredItems
+            if case .unavailable = settings.networkBindingStatus {
+                suspendTorrentsForUnavailableNetwork(settings.networkBindingStatus)
+            }
             try await reconcileCompletedMediaDownloads()
             try await reconcileCompletedHandoffs()
             let directDownloadIDs = Set(
@@ -590,6 +590,9 @@ final class DownloadCenter {
             await reconcileRestoredTorrentSession()
             initializationState = .loaded
             initializationFailureMessage = nil
+            if settings.networkBindingStatus.isAvailable {
+                resumeTorrentsForAvailableNetwork(settings.networkBindingStatus)
+            }
             presentNextQueuedExternalAddSheetIfNeeded()
             configureTorrentWatchFolder()
 
@@ -1936,8 +1939,16 @@ final class DownloadCenter {
         }
 
         for item in suspendableItems {
-            networkSuspendedDownloadIDs.insert(item.id)
-            pauseDownload(id: item.id)
+            item.wasSuspendedForNetworkBinding = true
+            if initializationState == .loaded {
+                pauseDownload(id: item.id, preservingSeeding: true)
+            } else {
+                setStatus(for: item, to: .paused)
+                item.speedBytesPerSecond = 0
+                item.uploadBytesPerSecond = 0
+                item.lastError = status.errorMessage
+                item.updatedAt = .now
+            }
         }
 
         if suspendableItems.isEmpty == false {
@@ -1947,7 +1958,7 @@ final class DownloadCenter {
         let previousBindingTask = networkBindingTask
         networkBindingTask = Task { @MainActor [weak self] in
             await previousBindingTask?.value
-            guard let self else {
+            guard let self, settings.networkBindingStatus == status else {
                 return
             }
 
@@ -1959,28 +1970,28 @@ final class DownloadCenter {
     }
 
     private func resumeTorrentsForAvailableNetwork(_ status: NetworkBindingStatus) {
-        let resumableIDs = networkSuspendedDownloadIDs
-        networkSuspendedDownloadIDs.removeAll()
-
         let previousBindingTask = networkBindingTask
         networkBindingTask = Task { @MainActor [weak self] in
             await previousBindingTask?.value
-            guard let self else {
+            guard let self, settings.networkBindingStatus == status else {
                 return
             }
 
             // The engine has to know the new interface before anything restarts
             // on it.
             await torrentService.setNetworkBinding(status)
+            guard settings.networkBindingStatus == status else {
+                return
+            }
 
-            // A suspended seeder is paused too, and resuming it restarts
-            // seeding the same way the sidebar action would.
-            for id in resumableIDs {
-                guard let item = item(for: id), item.status == .paused else {
+            for item in downloads where item.wasSuspendedForNetworkBinding {
+                item.wasSuspendedForNetworkBinding = false
+                guard item.status == .paused else {
                     continue
                 }
                 resumeDownload(item)
             }
+            schedulePersist()
         }
     }
 
@@ -4431,6 +4442,17 @@ final class DownloadCenter {
             return
         }
 
+        if item.backend == .aria2,
+           case .unavailable = settings.networkBindingStatus {
+            item.wasSuspendedForNetworkBinding = true
+            setStatus(for: item, to: .paused)
+            item.speedBytesPerSecond = 0
+            item.uploadBytesPerSecond = 0
+            item.lastError = settings.networkBindingStatus.errorMessage
+            item.updatedAt = .now
+            schedulePersist()
+            return
+        }
 
         if item.backend == .aria2,
            let gid = item.backendIdentifier,
@@ -5444,13 +5466,13 @@ final class DownloadCenter {
         return FileManager.default.fileExists(atPath: managedURL.path) ? managedURL : nil
     }
 
-    private func pauseDownload(id: UUID) {
+    private func pauseDownload(id: UUID, preservingSeeding: Bool = false) {
         guard let item = item(for: id),
               completionTasks[id] == nil else {
             return
         }
 
-        if item.status == .seeding, item.finishedAt != nil {
+        if item.status == .seeding, item.finishedAt != nil, preservingSeeding == false {
             stopSeeding(id: id)
             return
         }

@@ -31,7 +31,7 @@ private final class FakeNetworkBindingCatalog: NetworkBindingCataloging, @unchec
     }
 }
 
-private final class EventLog: @unchecked Sendable {
+private nonisolated final class EventLog: @unchecked Sendable {
     private let lock = NSLock()
     private var events: [String] = []
 
@@ -293,6 +293,25 @@ final class NetworkBindingTests: XCTestCase {
         )
     }
 
+    func testNetworkSuspensionMarkerRoundTripsWithTheDownloadRecord() throws {
+        let item = DownloadItem(
+            sourceURL: try XCTUnwrap(
+                URL(string: "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567")
+            ),
+            sourceKind: .magnetLink,
+            backend: .aria2,
+            preferredFilename: nil,
+            destinationFolderPath: "/tmp",
+            status: .paused,
+            wasSuspendedForNetworkBinding: true
+        )
+
+        let data = try JSONEncoder().encode(item.makeRecord())
+        let restored = try JSONDecoder().decode(DownloadRecord.self, from: data)
+
+        XCTAssertTrue(restored.wasSuspendedForNetworkBinding)
+    }
+
     func testEngineRefusesToStartWhileTheBoundInterfaceIsUnavailable() async {
         let service = Aria2TorrentService()
         await service.setNetworkBinding(.unavailable(displayName: "ProtonVPN"))
@@ -355,6 +374,55 @@ final class NetworkBindingTests: XCTestCase {
         await center.shutdownForTermination()
     }
 
+    func testLaunchWhileBindingIsUnavailablePersistsRestoredTorrentAsSuspended() async throws {
+        let suiteName = "HarborTests.NetworkBindingRestore.\(UUID().uuidString)"
+        let userDefaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        userDefaults.removePersistentDomain(forName: suiteName)
+        defer { userDefaults.removePersistentDomain(forName: suiteName) }
+
+        let persistenceRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("HarborNetworkRestoreTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: persistenceRoot) }
+
+        let persistence = DownloadPersistence(directoryURL: persistenceRoot)
+        let torrent = DownloadItem(
+            sourceURL: try XCTUnwrap(
+                URL(string: "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567")
+            ),
+            sourceKind: .magnetLink,
+            backend: .aria2,
+            preferredFilename: nil,
+            destinationFolderPath: persistenceRoot.path,
+            status: .downloading
+        )
+        try await persistence.save([torrent.makeRecord()])
+
+        let catalog = makeVPNCatalog(resolvedBinding: nil)
+        let settings = AppSettingsStore(
+            userDefaults: userDefaults,
+            networkBindingCatalog: catalog
+        )
+        settings.networkBindingSelection = vpnSelection
+        let center = DownloadCenter(
+            settings: settings,
+            persistence: persistence,
+            networkBindingMonitor: NetworkBindingMonitor(catalog: catalog, debounceInterval: 0),
+            torrentService: Aria2TorrentService(daemonStartupOperation: { _ in })
+        )
+
+        await center.initializeIfNeeded()
+
+        let restoredItem = try XCTUnwrap(center.downloads.first)
+        XCTAssertEqual(restoredItem.status, .paused)
+        XCTAssertTrue(restoredItem.wasSuspendedForNetworkBinding)
+        let persistedRecords = try await persistence.load()
+        let persistedRecord = try XCTUnwrap(persistedRecords.first)
+        XCTAssertEqual(persistedRecord.status, .paused)
+        XCTAssertTrue(persistedRecord.wasSuspendedForNetworkBinding)
+
+        _ = await center.shutdownForTermination()
+    }
+
     func testLosingTheBoundInterfacePausesTorrentsAndRegainingItResumesThem() async throws {
         let suiteName = "HarborTests.NetworkKillSwitch.\(UUID().uuidString)"
         let userDefaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -411,9 +479,21 @@ final class NetworkBindingTests: XCTestCase {
             destinationFolderPath: persistenceRoot.path,
             status: .paused
         )
+        let activeSeeder = DownloadItem(
+            sourceURL: try XCTUnwrap(
+                URL(string: "magnet:?xt=urn:btih:fedcba9876543210fedcba9876543210fedcba98")
+            ),
+            sourceKind: .magnetLink,
+            backend: .aria2,
+            preferredFilename: nil,
+            destinationFolderPath: persistenceRoot.path,
+            status: .seeding,
+            finishedAt: .now,
+            shouldSeedAfterDownload: true
+        )
         // Neither item carries an engine identifier, so the periodic torrent
         // status poll stays out of this test.
-        center.downloads = [activeTorrent, manuallyPausedTorrent]
+        center.downloads = [activeTorrent, manuallyPausedTorrent, activeSeeder]
 
         settings.networkBindingSelection = vpnSelection
         XCTAssertEqual(
@@ -434,6 +514,24 @@ final class NetworkBindingTests: XCTestCase {
         XCTAssertEqual(settings.networkBindingStatus, .unavailable(displayName: "ProtonVPN"))
         XCTAssertEqual(activeTorrent.status, .paused)
         XCTAssertEqual(manuallyPausedTorrent.status, .paused)
+        XCTAssertEqual(activeSeeder.status, .paused)
+        XCTAssertTrue(activeSeeder.shouldSeedAfterDownload)
+        XCTAssertTrue(activeSeeder.wasSuspendedForNetworkBinding)
+
+        let queuedDuringOutage = DownloadItem(
+            sourceURL: try XCTUnwrap(
+                URL(string: "magnet:?xt=urn:btih:00112233445566778899aabbccddeeff00112233")
+            ),
+            sourceKind: .magnetLink,
+            backend: .aria2,
+            preferredFilename: nil,
+            destinationFolderPath: persistenceRoot.path,
+            status: .queued
+        )
+        center.downloads.append(queuedDuringOutage)
+        center.resumeDownloads(ids: [queuedDuringOutage.id])
+        XCTAssertEqual(queuedDuringOutage.status, .paused)
+        XCTAssertTrue(queuedDuringOutage.wasSuspendedForNetworkBinding)
 
         // The VPN reconnects on a different interface, which is exactly why the
         // engine has to be rebound rather than merely restarted.
@@ -448,14 +546,22 @@ final class NetworkBindingTests: XCTestCase {
         }
 
         XCTAssertEqual(
-            startLog.recorded,
-            [activeTorrent.sourceURL.absoluteString],
-            "Only the torrent Harbor suspended may be restarted"
+            Set(startLog.recorded),
+            Set([
+                activeTorrent.sourceURL.absoluteString,
+                activeSeeder.sourceURL.absoluteString,
+                queuedDuringOutage.sourceURL.absoluteString
+            ]),
+            "Only the torrents Harbor suspended may be restarted"
         )
         XCTAssertEqual(
             manuallyPausedTorrent.status,
             .paused,
             "A manually paused torrent must not be resumed by the network coming back"
+        )
+        XCTAssertTrue(
+            activeSeeder.shouldSeedAfterDownload,
+            "Network suspension must not turn the user’s seeding preference off"
         )
 
         await center.shutdownForTermination()

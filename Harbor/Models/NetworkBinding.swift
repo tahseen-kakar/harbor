@@ -134,4 +134,18 @@ nonisolated enum NetworkBindingStatus: Equatable, Sendable {
     case unrestricted
     case bound(displayName: String, binding: ResolvedNetworkBinding)
     case unavailable(displayName: String)
+
+    var isAvailable: Bool {
+        if case .unavailable = self {
+            return false
+        }
+        return true
+    }
+
+    var errorMessage: String? {
+        guard case let .unavailable(displayName) = self else {
+            return nil
+        }
+        return TorrentEngineError.networkInterfaceUnavailable(displayName).localizedDescription
+    }
 }
