@@ -98,6 +98,7 @@ final class DownloadCenter {
     @ObservationIgnored private let managedTorrentSourceStore: ManagedTorrentSourceStore
     @ObservationIgnored private let torrentSidecarFileService: TorrentSidecarFileService
     @ObservationIgnored private let torrentWatchFolderService: TorrentWatchFolderService
+    @ObservationIgnored private let networkBindingMonitor: NetworkBindingMonitor
     @ObservationIgnored private let directPauseOperation: DirectPauseOperation
     @ObservationIgnored private let mediaCleanupOperation: MediaCleanupOperation
     @ObservationIgnored private let mediaPauseOperation: MediaPauseOperation
@@ -128,6 +129,10 @@ final class DownloadCenter {
     @ObservationIgnored private var pendingMediaRecoveryResets: Set<UUID> = []
     @ObservationIgnored private var torrentStartTasks: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var torrentPauseTasks: [UUID: Task<Void, Never>] = [:]
+    @ObservationIgnored private var networkBindingTask: Task<Void, Never>?
+    /// Downloads Harbor paused because the bound interface disappeared. Kept in
+    /// memory so a manual pause is never mistaken for one of these.
+    @ObservationIgnored private var networkSuspendedDownloadIDs: Set<UUID> = []
     @ObservationIgnored private var torrentStopSeedingTasks: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var pendingTorrentPauseIDs: Set<UUID> = []
     @ObservationIgnored private var pendingTorrentSeedingRestartIDs: Set<UUID> = []
@@ -204,6 +209,7 @@ final class DownloadCenter {
         managedTorrentSourceStore: ManagedTorrentSourceStore = ManagedTorrentSourceStore(),
         torrentSidecarFileService: TorrentSidecarFileService = TorrentSidecarFileService(),
         torrentWatchFolderService: TorrentWatchFolderService? = nil,
+        networkBindingMonitor: NetworkBindingMonitor? = nil,
         sleepPreventionService: (any DownloadSleepPreventing)? = nil,
         quickLookPreviewService: (any QuickLookPreviewing)? = nil,
         torrentService: Aria2TorrentService? = nil,
@@ -260,6 +266,7 @@ final class DownloadCenter {
         self.managedTorrentSourceStore = managedTorrentSourceStore
         self.torrentSidecarFileService = torrentSidecarFileService
         self.torrentWatchFolderService = torrentWatchFolderService ?? TorrentWatchFolderService()
+        self.networkBindingMonitor = networkBindingMonitor ?? NetworkBindingMonitor()
         self.sleepPreventionService = sleepPreventionService ?? DownloadSleepPreventionService()
         self.quickLookPreviewService = quickLookPreviewService ?? QuickLookPreviewService()
         self.torrentService = torrentService ?? Aria2TorrentService(transferSettings: settings.transferSettings)
@@ -303,6 +310,12 @@ final class DownloadCenter {
         self.torrentWatchFolderService.statusDidChange = { [weak self] status in
             self?.handleTorrentWatchFolderStatus(status)
         }
+        settings.networkBindingDidChange = { [weak self] _ in
+            self?.configureNetworkBinding()
+        }
+        self.networkBindingMonitor.statusDidChange = { [weak self] status in
+            self?.handleNetworkBindingStatus(status)
+        }
         monitorSleepPrevention()
     }
 
@@ -311,8 +324,10 @@ final class DownloadCenter {
         torrentRefreshTask?.cancel()
         directRetryTasks.values.forEach { $0.cancel() }
         orphanedTorrentCleanupTasks.values.forEach { $0.cancel() }
-        Task { @MainActor [torrentWatchFolderService] in
+        networkBindingTask?.cancel()
+        Task { @MainActor [torrentWatchFolderService, networkBindingMonitor] in
             torrentWatchFolderService.stop()
+            networkBindingMonitor.stop()
         }
         Task { [mediaService] in
             await mediaService?.shutdown()
@@ -339,6 +354,11 @@ final class DownloadCenter {
         var orphanCleanupWarning: String?
 
         do {
+            // Session recovery below talks to aria2. The engine must already
+            // know its interface by then, or a restored torrent would briefly
+            // transfer over whatever route the system happens to prefer.
+            await applyNetworkBindingBeforeEngineUse()
+
             do {
                 try await mediaService.terminateOrphanedMediaProcesses()
             } catch {
@@ -1877,6 +1897,93 @@ final class DownloadCenter {
         }
     }
 
+    /// Establishes the binding and waits until the engine has it, so no
+    /// daemon can start before Harbor knows which interface it may use.
+    private func applyNetworkBindingBeforeEngineUse() async {
+        configureNetworkBinding()
+        await networkBindingTask?.value
+    }
+
+    private func configureNetworkBinding() {
+        guard isShuttingDown == false else {
+            return
+        }
+
+        networkBindingMonitor.start(
+            selection: settings.networkBindingSelection,
+            displayName: settings.networkBindingDisplayName
+        )
+    }
+
+    private func handleNetworkBindingStatus(_ status: NetworkBindingStatus) {
+        settings.updateNetworkBindingStatus(status)
+
+        guard isShuttingDown == false else {
+            return
+        }
+
+        switch status {
+        case .unavailable:
+            suspendTorrentsForUnavailableNetwork(status)
+        case .unrestricted, .bound:
+            resumeTorrentsForAvailableNetwork(status)
+        }
+    }
+
+    private func suspendTorrentsForUnavailableNetwork(_ status: NetworkBindingStatus) {
+        let suspendableItems = downloads.filter {
+            $0.backend == .aria2 && ($0.canPause || $0.status == .queued)
+        }
+
+        for item in suspendableItems {
+            networkSuspendedDownloadIDs.insert(item.id)
+            pauseDownload(id: item.id)
+        }
+
+        if suspendableItems.isEmpty == false {
+            schedulePersist()
+        }
+
+        let previousBindingTask = networkBindingTask
+        networkBindingTask = Task { @MainActor [weak self] in
+            await previousBindingTask?.value
+            guard let self else {
+                return
+            }
+
+            // Pausing travels over RPC, so the daemon has to outlive it. Only
+            // then may the engine refuse to run without the interface.
+            await waitForTasks(Array(torrentPauseTasks.values))
+            await torrentService.setNetworkBinding(status)
+        }
+    }
+
+    private func resumeTorrentsForAvailableNetwork(_ status: NetworkBindingStatus) {
+        let resumableIDs = networkSuspendedDownloadIDs
+        networkSuspendedDownloadIDs.removeAll()
+
+        let previousBindingTask = networkBindingTask
+        networkBindingTask = Task { @MainActor [weak self] in
+            await previousBindingTask?.value
+            guard let self else {
+                return
+            }
+
+            // The engine has to know the new interface before anything restarts
+            // on it.
+            await torrentService.setNetworkBinding(status)
+
+            // A suspended seeder is paused too, and resuming it restarts
+            // seeding the same way the sidebar action would.
+            for id in resumableIDs {
+                guard let item = item(for: id), item.status == .paused else {
+                    continue
+                }
+                resumeDownload(item)
+            }
+        }
+    }
+
     private func handleTorrentWatchFolderStatus(_ status: TorrentWatchFolderStatus) {
         settings.updateTorrentWatchFolderStatus(status)
 
@@ -1978,6 +2085,9 @@ final class DownloadCenter {
         directRetryTasks.removeAll()
         readyDirectRetries.removeAll()
         torrentWatchFolderService.stop()
+        networkBindingMonitor.stop()
+        networkBindingTask?.cancel()
+        networkBindingTask = nil
 
         await pendingTorrentRefresh?.value
         await cancelOrphanedTorrentCleanupTasksAndWait()
@@ -2217,6 +2327,7 @@ final class DownloadCenter {
         isShuttingDown = false
         resumeDeferredSeedersAfterFailedShutdown()
         configureTorrentWatchFolder()
+        configureNetworkBinding()
         startTorrentRefreshLoopIfNeeded()
         startNextQueuedDownloadsIfNeeded()
     }
@@ -2231,6 +2342,9 @@ final class DownloadCenter {
         directRetryTasks.removeAll()
         readyDirectRetries.removeAll()
         torrentWatchFolderService.stop()
+        networkBindingMonitor.stop()
+        networkBindingTask?.cancel()
+        networkBindingTask = nil
         await cancelPendingPersistenceAndWait()
         await pendingTorrentRefresh?.value
 
@@ -5195,7 +5309,7 @@ final class DownloadCenter {
                 return
             }
 
-            if hadBackendIdentifier, isTransientTorrentEngineError(error) {
+            if hadBackendIdentifier, Self.isTransientTorrentEngineError(error) {
                 // A failed status lookup is not proof that an existing aria2
                 // transfer is paused. Keep its slot occupied until a later
                 // refresh confirms a non-writing state.
@@ -5965,7 +6079,7 @@ final class DownloadCenter {
                     continue
                 }
 
-                if isTransientTorrentEngineError(error) {
+                if Self.isTransientTorrentEngineError(error) {
                     refreshedItem.speedBytesPerSecond = 0
                     refreshedItem.uploadBytesPerSecond = 0
                     refreshedItem.updatedAt = .now
@@ -7771,7 +7885,7 @@ final class DownloadCenter {
         )
     }
 
-    private func isTransientTorrentEngineError(_ error: Error) -> Bool {
+    nonisolated static func isTransientTorrentEngineError(_ error: Error) -> Bool {
         if let urlError = error as? URLError {
             switch urlError.code {
             case .timedOut, .cannotConnectToHost, .cannotFindHost, .networkConnectionLost, .notConnectedToInternet:
@@ -7783,6 +7897,13 @@ final class DownloadCenter {
 
         if case let TorrentEngineError.startupFailed(message) = error {
             return message.localizedCaseInsensitiveContains("timed out")
+        }
+
+        // A missing bound interface means Harbor deliberately stopped the
+        // engine. The transfers are suspended, not broken, so they keep their
+        // status and can resume once the interface returns.
+        if case TorrentEngineError.networkInterfaceUnavailable = error {
+            return true
         }
 
         return false

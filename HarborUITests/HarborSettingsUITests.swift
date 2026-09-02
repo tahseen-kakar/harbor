@@ -39,4 +39,17 @@ final class HarborSettingsUITests: HarborUITestCase {
         XCTAssertTrue(app.staticTexts["yt-dlp"].exists)
         XCTAssertTrue(app.staticTexts["Deno"].exists)
     }
+
+    func testTorrentsTabOffersNetworkInterfaceBinding() {
+        launchHarbor()
+        app.typeKey(",", modifierFlags: [.command])
+
+        let torrentsTab = app.buttons["Torrents"].firstMatch
+        XCTAssertTrue(torrentsTab.waitForExistence(timeout: 10))
+        torrentsTab.click()
+
+        let interfacePicker = app.popUpButtons["settings.torrents.networkInterface"].firstMatch
+        XCTAssertTrue(interfacePicker.waitForExistence(timeout: 10))
+        XCTAssertEqual(String(describing: interfacePicker.value), "Automatic")
+    }
 }
