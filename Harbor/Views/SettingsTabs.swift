@@ -65,43 +65,6 @@ struct TorrentsSettingsTab: View {
         @Bindable var settings = settings
 
         Form {
-            Section("Network") {
-                Picker("Network Interface", selection: $settings.networkBindingSelection) {
-                    Label(
-                        NetworkBindingTarget.any.displayName,
-                        systemImage: NetworkBindingTarget.any.symbolName
-                    )
-                    .tag(NetworkBindingSelection.any)
-
-                    if serviceTargets.isEmpty == false {
-                        Section("Services") {
-                            ForEach(serviceTargets) { target in
-                                Label(target.displayName, systemImage: target.symbolName)
-                                    .tag(target.selection)
-                            }
-                        }
-                    }
-
-                    if interfaceTargets.isEmpty == false {
-                        Section("Interfaces") {
-                            ForEach(interfaceTargets) { target in
-                                Label(target.displayName, systemImage: target.symbolName)
-                                    .tag(target.selection)
-                            }
-                        }
-                    }
-                }
-                .accessibilityIdentifier(HarborAccessibility.settingsNetworkInterfacePicker)
-
-                if settings.networkBindingSelection != .any {
-                    NetworkBindingStatusRow(status: settings.networkBindingStatus)
-                }
-
-                Text("Torrent traffic uses only the selected interface. While that interface is unavailable, Harbor pauses every torrent and resumes it once the interface returns. Regular and media downloads are not affected.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
             Section("Automation") {
                 Toggle("Watch a folder for torrent files", isOn: $settings.torrentWatchFolderEnabled)
 
@@ -142,6 +105,43 @@ struct TorrentsSettingsTab: View {
                 }
 
                 Text("Stops seeding after Harbor uploads the selected multiple of the torrent size.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Network") {
+                Picker("Network Interface", selection: $settings.networkBindingSelection) {
+                    Label(
+                        NetworkBindingTarget.any.displayName,
+                        systemImage: NetworkBindingTarget.any.symbolName
+                    )
+                    .tag(NetworkBindingSelection.any)
+
+                    if serviceTargets.isEmpty == false {
+                        Section("Services") {
+                            ForEach(serviceTargets) { target in
+                                Label(target.displayName, systemImage: target.symbolName)
+                                    .tag(target.selection)
+                            }
+                        }
+                    }
+
+                    if interfaceTargets.isEmpty == false {
+                        Section("Interfaces") {
+                            ForEach(interfaceTargets) { target in
+                                Label(target.displayName, systemImage: target.symbolName)
+                                    .tag(target.selection)
+                            }
+                        }
+                    }
+                }
+                .accessibilityIdentifier(HarborAccessibility.settingsNetworkInterfacePicker)
+
+                if settings.networkBindingSelection != .any {
+                    NetworkBindingStatusRow(status: settings.networkBindingStatus)
+                }
+
+                Text("Torrent traffic uses only the selected interface. While that interface is unavailable, Harbor pauses every torrent and resumes it once the interface returns. Regular and media downloads are not affected.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
