@@ -73,6 +73,9 @@ nonisolated extension Collection where Element == RequestHeader {
               let sourceOrigin = HTTPOrigin(sourceURL),
               let redirectedOrigin = HTTPOrigin(redirectedURL),
               sourceOrigin == redirectedOrigin else {
+            for header in self {
+                request.setValue(nil, forHTTPHeaderField: header.name)
+            }
             return
         }
 

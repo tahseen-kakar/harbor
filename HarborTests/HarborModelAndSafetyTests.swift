@@ -528,6 +528,38 @@ final class HarborModelAndSafetyTests: XCTestCase {
         XCTAssertNil(crossOriginRequest.value(forHTTPHeaderField: "X-Client"))
     }
 
+    func testCrossOriginRedirectsRemoveAlreadyPopulatedCustomHeaders() throws {
+        let sourceURL = try XCTUnwrap(URL(string: "https://example.com/source"))
+        let headers = [
+            RequestHeader(name: "Authorization", value: "Bearer secret"),
+            RequestHeader(name: "Cookie", value: "session=secret"),
+            RequestHeader(name: "X-API-Key", value: "secret-key"),
+            RequestHeader(name: "User-Agent", value: "Harbor")
+        ]
+
+        for redirectedURL in [
+            "https://downloads.example.net/file",
+            "http://example.com/file",
+            "https://example.com:8443/file"
+        ] {
+            var request = URLRequest(url: try XCTUnwrap(URL(string: redirectedURL)))
+            for header in headers {
+                request.setValue(header.value, forHTTPHeaderField: header.name.lowercased())
+            }
+            request.setValue("application/octet-stream", forHTTPHeaderField: "Accept")
+
+            headers.apply(toSameOriginRedirect: &request, originatingAt: sourceURL)
+
+            for header in headers {
+                XCTAssertNil(
+                    request.value(forHTTPHeaderField: header.name),
+                    "\(header.name) was forwarded to \(redirectedURL)"
+                )
+            }
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "application/octet-stream")
+        }
+    }
+
     func testDirectDownloadRequestPreservesHeadersAndRecoveryInvariants() throws {
         let sourceURL = try XCTUnwrap(URL(string: "https://example.com/archive.bin"))
         let recovery = DirectDownloadRecoverySnapshot(
