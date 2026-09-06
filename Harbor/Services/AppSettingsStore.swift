@@ -10,6 +10,15 @@ enum TrafficMode: String, CaseIterable, Identifiable, Sendable {
 
     var id: String { rawValue }
 
+    var systemImage: String {
+        switch self {
+        case .unlimited: "infinity"
+        case .balanced: "dial.medium"
+        case .quiet: "leaf"
+        case .custom: "slider.horizontal.3"
+        }
+    }
+
     var title: LocalizedStringResource {
         switch self {
         case .unlimited:

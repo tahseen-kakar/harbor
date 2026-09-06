@@ -1,32 +1,32 @@
 import Foundation
 
 enum DownloadFormatting {
-    private static func byteFormatter() -> ByteCountFormatter {
+    private static let byteFormatter: ByteCountFormatter = {
         let formatter = ByteCountFormatter()
         formatter.allowedUnits = [.useKB, .useMB, .useGB, .useTB]
         formatter.countStyle = .file
         formatter.includesUnit = true
         formatter.isAdaptive = true
         return formatter
-    }
+    }()
 
-    private static func dateFormatter() -> DateFormatter {
+    private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
         return formatter
-    }
+    }()
 
-    private static func durationFormatter() -> DateComponentsFormatter {
+    private static let durationFormatter: DateComponentsFormatter = {
         let formatter = DateComponentsFormatter()
         formatter.allowedUnits = [.hour, .minute, .second]
         formatter.unitsStyle = .abbreviated
         formatter.maximumUnitCount = 2
         return formatter
-    }
+    }()
 
     static func byteString(_ byteCount: Int64) -> String {
-        byteFormatter().string(fromByteCount: max(0, byteCount))
+        byteFormatter.string(fromByteCount: max(0, byteCount))
     }
 
     static func speedString(_ bytesPerSecond: Double) -> String {
@@ -34,7 +34,7 @@ enum DownloadFormatting {
             return String(localized: "Waiting", comment: "Speed status fallback")
         }
 
-        return "\(byteFormatter().string(fromByteCount: Int64(bytesPerSecond.rounded()))) / s"
+        return "\(byteFormatter.string(fromByteCount: Int64(bytesPerSecond.rounded()))) / s"
     }
 
     static func throughputString(_ bytesPerSecond: Double) -> String {
@@ -42,7 +42,7 @@ enum DownloadFormatting {
             return "0 KB/s"
         }
 
-        return "\(byteFormatter().string(fromByteCount: Int64(bytesPerSecond.rounded())))/s"
+        return "\(byteFormatter.string(fromByteCount: Int64(bytesPerSecond.rounded())))/s"
     }
 
     static func progressString(bytesWritten: Int64, expectedBytes: Int64) -> String {
@@ -68,7 +68,7 @@ enum DownloadFormatting {
             return String(localized: "Not available", comment: "Date fallback status")
         }
 
-        return dateFormatter().string(from: date)
+        return dateFormatter.string(from: date)
     }
 
     static func etaString(bytesRemaining: Int64, speedBytesPerSecond: Double) -> String? {
@@ -77,6 +77,6 @@ enum DownloadFormatting {
         }
 
         let eta = Double(bytesRemaining) / speedBytesPerSecond
-        return durationFormatter().string(from: eta)
+        return durationFormatter.string(from: eta)
     }
 }

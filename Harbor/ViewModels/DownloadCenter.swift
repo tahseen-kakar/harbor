@@ -1635,22 +1635,16 @@ final class DownloadCenter {
     }
 
     var filteredDownloads: [DownloadItem] {
-        let filtered = downloads.filter { item in
-            guard selectedFilter.includes(item) else {
-                return false
-            }
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return downloads.filter { matchesCurrentFilter($0, query: query) }.sorted(using: sortOrder)
+    }
 
-            let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard query.isEmpty == false else {
-                return true
-            }
-
-            return item.displayName.localizedCaseInsensitiveContains(query)
-                || item.sourceDisplayText.localizedCaseInsensitiveContains(query)
-                || item.sourceHost.localizedCaseInsensitiveContains(query)
-        }
-
-        return filtered.sorted(using: sortOrder)
+    private func matchesCurrentFilter(_ item: DownloadItem, query: String) -> Bool {
+        guard selectedFilter.includes(item) else { return false }
+        guard query.isEmpty == false else { return true }
+        return item.displayName.localizedCaseInsensitiveContains(query)
+            || item.sourceDisplayText.localizedCaseInsensitiveContains(query)
+            || item.sourceHost.localizedCaseInsensitiveContains(query)
     }
 
     var selectedDownload: DownloadItem? {
@@ -1719,6 +1713,13 @@ final class DownloadCenter {
             return []
         }
 
+        // A single-item action must not observe every download's changing sort keys.
+        if ids.count == 1, let id = ids.first {
+            let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let item = downloads.first(where: { $0.id == id }),
+                  matchesCurrentFilter(item, query: query) else { return [] }
+            return [item]
+        }
         return filteredDownloads.filter { ids.contains($0.id) }
     }
 
@@ -1799,6 +1800,17 @@ final class DownloadCenter {
     }
 
     var globalTrafficMode: TrafficMode { settings.trafficMode }
+
+    func differingTrafficModeOverride(for item: DownloadItem) -> TrafficMode? {
+        guard let mode = item.trafficModeOverride else { return nil }
+        let global = settings.transferSettings
+        let downloadLimit = global.perDownloadSpeedLimitBytesPerSecond
+        let uploadLimit = global.perDownloadUploadSpeedLimitBytesPerSecond
+        let downloadDiffers = item.downloadLimitOverride.resolvedBytesPerSecond(inheriting: downloadLimit) != downloadLimit
+        let uploadDiffers = item.backend == .aria2
+            && item.uploadLimitOverride.resolvedBytesPerSecond(inheriting: uploadLimit) != uploadLimit
+        return downloadDiffers || uploadDiffers ? mode : nil
+    }
 
     func setDownloadLimitOverride(
         _ limitOverride: TransferLimitOverride,
@@ -2510,7 +2522,7 @@ final class DownloadCenter {
         sourceURL: URL,
         requestHeaders: [RequestHeader]
     ) async throws -> TorrentContentsPreview {
-        try await TorrentContentsPreviewService().preview(
+        return try await TorrentContentsPreviewService().preview(
             sourceKind: sourceKind,
             sourceURL: sourceURL,
             requestHeaders: requestHeaders,

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct DownloadsContentView: View {
     let center: DownloadCenter
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @AppStorage("downloads.table.columnCustomization")
     private var columnCustomization = TableColumnCustomization<DownloadItem>()
@@ -9,14 +10,16 @@ struct DownloadsContentView: View {
 
     var body: some View {
         @Bindable var center = center
+        let downloads = center.filteredDownloads
 
         VStack(spacing: 0) {
-            if center.filteredDownloads.isEmpty {
+            if downloads.isEmpty {
                 emptyState
             } else {
+                // Keep column widths stable as the inspector changes the visible table area.
                 Table(
                     of: DownloadItem.self,
-                    selection: $center.selectedDownloadIDs,
+                    selection: downloadSelection,
                     sortOrder: $center.sortOrder,
                     columnCustomization: $columnCustomization
                 ) {
@@ -24,6 +27,7 @@ struct DownloadsContentView: View {
                         DownloadNameCell(item: item)
                             .accessibilityIdentifier(HarborAccessibility.downloadRow(item.id))
                     }
+                    .width(300)
                     .customizationID("name")
                     .defaultVisibility(.visible)
                     .disabledCustomizationBehavior(.visibility)
@@ -31,29 +35,42 @@ struct DownloadsContentView: View {
                     TableColumn("Status", value: \.status.rawValue) { item in
                         DownloadStatusBadge(status: item.status, downloadID: item.id)
                     }
+                    .width(135)
                     .customizationID("status")
                     .defaultVisibility(.visible)
 
                     TableColumn("Transfer", value: \.progress) { item in
                         DownloadTransferCell(item: item)
                     }
+                    .width(190)
                     .customizationID("transfer")
                     .defaultVisibility(.visible)
 
                     TableColumn("Source", value: \.sourceDisplayText) { item in
                         DownloadSourceCell(item: item)
                     }
+                    .width(120)
                     .customizationID("source")
                     .defaultVisibility(.visible)
 
                     TableColumn("Speed", value: \.displayedSpeedBytesPerSecond) { item in
-                        Text(
-                            item.status == .seeding
-                                ? DownloadFormatting.throughputString(item.uploadBytesPerSecond)
-                                : item.speedText
-                        )
+                        HStack(spacing: 6) {
+                            if let mode = center.differingTrafficModeOverride(for: item) {
+                                Image(systemName: mode.systemImage)
+                                    .symbolVariant(.fill)
+                                    .foregroundStyle(.secondary)
+                                    .help(Text(mode.title))
+                                    .accessibilityLabel(Text(mode.title))
+                            }
+                            Text(
+                                item.status == .seeding
+                                    ? DownloadFormatting.throughputString(item.uploadBytesPerSecond)
+                                    : item.speedText
+                            )
                             .monospacedDigit()
+                        }
                     }
+                    .width(140)
                     .customizationID("speed")
                     .defaultVisibility(.visible)
 
@@ -61,10 +78,11 @@ struct DownloadsContentView: View {
                         Text(DownloadFormatting.dateString(item.updatedAt))
                             .font(.caption)
                     }
+                    .width(170)
                     .customizationID("updated")
                     .defaultVisibility(.visible)
                 } rows: {
-                    ForEach(center.filteredDownloads) { item in
+                    ForEach(downloads) { item in
                         TableRow(item)
                             .contextMenu {
                                 rowContextMenu(for: item)
@@ -75,30 +93,20 @@ struct DownloadsContentView: View {
             }
         }
         .navigationTitle(center.selectedFilter.title)
-        .confirmationDialog(
-            "Move Download Data to Trash?",
-            isPresented: Binding(
-                get: { pendingDataRemovalIDs.isEmpty == false },
-                set: { isPresented in
-                    if isPresented == false {
-                        pendingDataRemovalIDs = []
-                    }
-                }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button("Move to Trash", role: .destructive) {
-                let ids = pendingDataRemovalIDs
-                pendingDataRemovalIDs = []
-                center.removeDownloadsAndData(ids: ids)
-            }
+        .modifier(DownloadDataRemovalConfirmation(center: center, ids: $pendingDataRemovalIDs))
+    }
 
-            Button("Cancel", role: .cancel) {
-                pendingDataRemovalIDs = []
+    private var downloadSelection: Binding<Set<UUID>> {
+        Binding(
+            get: { center.selectedDownloadIDs },
+            set: { ids in
+                let changesInspectorVisibility = center.selectedDownloadIDs.isEmpty != ids.isEmpty
+                // Animate the original selection update, not a later onChange callback.
+                withAnimation(changesInspectorVisibility && reduceMotion == false ? .default : nil) {
+                    center.selectedDownloadIDs = ids
+                }
             }
-        } message: {
-            Text(center.dataRemovalConfirmationMessage(ids: pendingDataRemovalIDs))
-        }
+        )
     }
 
     private var emptyState: some View {
@@ -157,85 +165,14 @@ struct DownloadsContentView: View {
         }
     }
 
-    @ViewBuilder
     private func rowContextMenu(for item: DownloadItem) -> some View {
-        let targetIDs = center.contextMenuDownloadIDs(for: item.id)
-
-        if center.canContinueInBrowser(ids: targetIDs) {
-            Button("Continue in Harbor") {
-                center.continueInBrowser(id: item.id)
-            }
-        }
-
-        if center.canPauseDownloads(ids: targetIDs) {
-            Button("Pause") {
-                center.pauseDownloads(ids: targetIDs)
-            }
-        }
-
-        if center.canResumeDownloads(ids: targetIDs) {
-            Button("Resume") {
-                center.resumeDownloads(ids: targetIDs)
-            }
-        }
-
-        if center.canRetryDownloads(ids: targetIDs) {
-            Button("Retry") {
-                center.retryDownloads(ids: targetIDs)
-            }
-        }
-
-        if center.canOpenDownloads(ids: targetIDs) {
-            Button("Open File") {
-                center.openDownloads(ids: targetIDs)
-            }
-        }
-
-        if center.canQuickLookDownloads(ids: targetIDs) {
-            Button("Quick Look") {
-                center.quickLookDownloads(ids: targetIDs)
-            }
-        }
-
-        if targetIDs.count == 1, item.backend == .aria2, item.status == .completed {
-            Button("Start Seeding") {
-                center.startSeeding(id: item.id)
-            }
-        }
-
-        if targetIDs.count == 1,
-           item.backend == .aria2,
-           item.status == .seeding || (item.status == .paused && item.finishedAt != nil && item.shouldSeedAfterDownload) {
-            Button("Stop Seeding") {
-                center.stopSeeding(id: item.id)
-            }
-        }
-
-        Button("Cancel Download") {
-            center.cancelDownloads(ids: targetIDs)
-        }
-        .disabled(center.canCancelDownloads(ids: targetIDs) == false)
-
-        Divider()
-
-        Button("Reveal in Finder") {
-            center.revealInFinder(ids: targetIDs)
-        }
-
-        Button("Copy Source URL") {
-            center.copySourceURLs(ids: targetIDs)
-        }
-
-        Button("Remove from List", role: .destructive) {
-            center.removeDownloads(ids: targetIDs)
-        }
-
-        if center.canRemoveDownloadedData(ids: targetIDs) {
-            Button("Remove and Move Data to Trash…", role: .destructive) {
-                pendingDataRemovalIDs = targetIDs
-            }
-        }
+        DownloadSelectionActions(
+            center: center,
+            ids: center.contextMenuDownloadIDs(for: item.id),
+            singleItem: item
+        ) { pendingDataRemovalIDs = $0 }
     }
+
 }
 
 private struct DownloadNameCell: View {

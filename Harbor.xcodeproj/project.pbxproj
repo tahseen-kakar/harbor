@@ -232,10 +232,10 @@
 			productRefGroup = 0DA35C552F6338930095E98E /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
-				targets = (
-					0DA35C532F6338930095E98E /* Harbor */,
-					0D4700062F90000000A1B2C3 /* HarborTests */,
-					0D8000062FA0000000A1B2C3 /* HarborUITests */,
+			targets = (
+				0DA35C532F6338930095E98E /* Harbor */,
+				0D4700062F90000000A1B2C3 /* HarborTests */,
+				0D8000062FA0000000A1B2C3 /* HarborUITests */,
 			);
 		};
 /* End PBXProject section */

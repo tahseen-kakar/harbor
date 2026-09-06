@@ -4,7 +4,10 @@ struct DownloadDetailView: View {
     let center: DownloadCenter
 
     var body: some View {
-        if let item = center.selectedDownload {
+        if center.selectedDownloadIDs.count > 1 {
+            DownloadBulkInspector(center: center)
+                .accessibilityIdentifier(HarborAccessibility.inspector)
+        } else if let item = center.selectedDownload {
             DownloadInspectorContent(item: item, center: center)
                 .accessibilityIdentifier(HarborAccessibility.inspector)
         }
@@ -286,24 +289,14 @@ private struct DownloadHeader: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: item.sourceBadgeImage)
+            VStack(alignment: .leading, spacing: 8) {
+                Text(item.displayName)
                     .font(.title2.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 28)
-                    .accessibilityHidden(true)
+                    .lineLimit(3)
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(item.displayName)
-                        .font(.title2.weight(.semibold))
-                        .lineLimit(3)
-
-                    sourceLine
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                DownloadStatusBadge(status: item.status)
+                sourceLine
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             progressBlock
         }
@@ -339,9 +332,9 @@ private struct DownloadHeader: View {
     private var progressBlock: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Progress")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
+                Label(item.status.title, systemImage: item.status.systemImage)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(progressTint)
 
                 Spacer()
 
@@ -377,7 +370,7 @@ private struct DownloadHeader: View {
         case .downloading:
             .blue
         case .seeding:
-            .teal
+            .purple
         case .browserSessionRequired:
             .mint
         case .paused:
@@ -591,19 +584,10 @@ private struct DownloadProfileMenu: View {
     let center: DownloadCenter
     @State private var showsCustomLimits = false
 
-    private var inheritsGlobal: Bool {
-        item.downloadLimitOverride == .inherit
-            && (item.backend != .aria2 || item.uploadLimitOverride == .inherit)
-    }
+    private var inheritsGlobal: Bool { item.trafficModeOverride == nil }
 
     private var currentMode: TrafficMode {
-        if inheritsGlobal { return center.globalTrafficMode }
-        return [TrafficMode.unlimited, .balanced, .quiet].first { mode in
-            let limits = mode.applying(to: .default)
-            return item.downloadLimitOverride == limitOverride(for: limits.perDownloadSpeedLimitBytesPerSecond)
-                && (item.backend != .aria2
-                    || item.uploadLimitOverride == limitOverride(for: limits.perDownloadUploadSpeedLimitBytesPerSecond))
-        } ?? .custom
+        item.trafficModeOverride ?? center.globalTrafficMode
     }
 
     var body: some View {
@@ -626,10 +610,10 @@ private struct DownloadProfileMenu: View {
                     } else {
                         let limits = mode.applying(to: .default)
                         center.setDownloadLimitOverride(
-                            limitOverride(for: limits.perDownloadSpeedLimitBytesPerSecond), for: item.id
+                            TransferLimitOverride(bytesPerSecond: limits.perDownloadSpeedLimitBytesPerSecond), for: item.id
                         )
                         center.setUploadLimitOverride(
-                            limitOverride(for: limits.perDownloadUploadSpeedLimitBytesPerSecond), for: item.id
+                            TransferLimitOverride(bytesPerSecond: limits.perDownloadUploadSpeedLimitBytesPerSecond), for: item.id
                         )
                     }
                 } label: {
@@ -663,9 +647,7 @@ private struct DownloadProfileMenu: View {
         }
     }
 
-    private func limitOverride(for bytesPerSecond: Int64?) -> TransferLimitOverride {
-        bytesPerSecond.map { .limited(kilobytesPerSecond: Int($0 / 1_024)) } ?? .unlimited
-    }
+
 }
 
 private struct TorrentSharingRow: View {
@@ -867,23 +849,21 @@ private struct DownloadStorageSection: View {
     let item: DownloadItem
 
     var body: some View {
-        DownloadDetailSection(title: "Storage") {
-            VStack(spacing: 0) {
-                DownloadValueRow(title: "Destination", value: item.destinationFolderPath)
+        VStack(spacing: 0) {
+            DownloadValueRow(title: "Destination", value: item.destinationFolderPath)
 
-                if let selectionText = item.partialTorrentSelectionText,
-                   let selection = item.torrentFileSelection {
-                    Divider()
-                    DownloadValueRow(
-                        title: "Selected Files",
-                        value: "\(selectionText) • \(DownloadFormatting.byteString(selection.selectedBytes))"
-                    )
-                }
+            if let selectionText = item.partialTorrentSelectionText,
+               let selection = item.torrentFileSelection {
+                Divider()
+                DownloadValueRow(
+                    title: "Selected Files",
+                    value: "\(selectionText) • \(DownloadFormatting.byteString(selection.selectedBytes))"
+                )
+            }
 
-                if let fileLocationPath = item.fileLocationPath {
-                    Divider()
-                    DownloadValueRow(title: "Saved File", value: fileLocationPath)
-                }
+            if let fileLocationPath = item.fileLocationPath {
+                Divider()
+                DownloadValueRow(title: "Saved File", value: fileLocationPath)
             }
         }
     }

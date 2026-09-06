@@ -1,9 +1,65 @@
 import Foundation
+import Observation
+import os
 import XCTest
 @testable import Harbor
 
 @MainActor
 final class HarborModelAndSafetyTests: XCTestCase {
+    func testSingleDownloadActionsDoNotObserveOtherDownloadsProgress() {
+        let center = HarborPreviewFixtures.makeCenter()
+        let target = center.downloads[0]
+        let other = center.downloads[1]
+        let changed = OSAllocatedUnfairLock(initialState: false)
+
+        withObservationTracking {
+            XCTAssertTrue(center.canPauseDownloads(ids: [target.id]))
+        } onChange: {
+            changed.withLock { $0 = true }
+        }
+        other.updatedAt = .now
+        other.progress = 0.75
+        XCTAssertFalse(changed.withLock { $0 })
+
+        target.status = .paused
+        XCTAssertTrue(changed.withLock { $0 })
+    }
+
+    func testSingleDownloadActionsStillRespectSearchAndFilter() {
+        let center = HarborPreviewFixtures.makeCenter()
+        let target = center.downloads[0]
+        XCTAssertTrue(center.canPauseDownloads(ids: [target.id]))
+        center.searchText = "no-matching-download"
+        XCTAssertFalse(center.canPauseDownloads(ids: [target.id]))
+        center.searchText = ""
+        center.selectedFilter = .completed
+        XCTAssertFalse(center.canPauseDownloads(ids: [target.id]))
+    }
+
+    func testSpeedColumnShowsOnlyOverridesThatDifferFromGlobalLimits() {
+        let settings = HarborPreviewFixtures.makeSettings()
+        let center = DownloadCenter(settings: settings)
+        let item = HarborPreviewFixtures.sampleDownloads()[0]
+        settings.trafficMode = .unlimited
+        XCTAssertNil(center.differingTrafficModeOverride(for: item))
+
+        item.downloadLimitOverride = .unlimited
+        item.uploadLimitOverride = .unlimited
+        XCTAssertNil(center.differingTrafficModeOverride(for: item))
+
+        item.downloadLimitOverride = .limited(kilobytesPerSecond: 5 * 1_024)
+        item.uploadLimitOverride = .limited(kilobytesPerSecond: 1_024)
+        XCTAssertEqual(center.differingTrafficModeOverride(for: item), .balanced)
+        settings.trafficMode = .balanced
+        XCTAssertNil(center.differingTrafficModeOverride(for: item))
+
+        item.uploadLimitOverride = .limited(kilobytesPerSecond: 100)
+        XCTAssertEqual(center.differingTrafficModeOverride(for: item), .custom)
+        item.downloadLimitOverride = .inherit
+        item.uploadLimitOverride = .inherit
+        XCTAssertNil(center.differingTrafficModeOverride(for: item))
+    }
+
     func testHarborURLSchemeIsRegistered() throws {
         let urlTypes = try XCTUnwrap(
             Bundle.main.object(forInfoDictionaryKey: "CFBundleURLTypes") as? [[String: Any]]

@@ -4,30 +4,34 @@ import SwiftUI
 struct RootView: View {
     let center: DownloadCenter
     let settings: AppSettingsStore
-    @AppStorage("downloads.inspector.width")
-    private var storedInspectorWidth = Double(Layout.inspectorIdealWidth)
     @AppStorage("downloads.sidebar.isVisible")
     private var isSidebarVisible = false
     @AppStorage("downloads.sidebar.width")
     private var storedSidebarWidth = Double(Layout.sidebarIdealWidth)
+    @State private var sidebarColumns: NavigationSplitViewVisibility
+    @State private var sidebarWidthSaveTask: Task<Void, Never>?
     @State private var isDownloadDropTargeted = false
     @FocusState private var isSearchFocused: Bool
+
+    init(center: DownloadCenter, settings: AppSettingsStore) {
+        self.center = center
+        self.settings = settings
+        _sidebarColumns = State(initialValue:
+            HarborTestRuntime.userDefaults.bool(forKey: "downloads.sidebar.isVisible") ? .all : .detailOnly
+        )
+    }
 
     private enum Layout {
         static let sidebarMinWidth: CGFloat = 200
         static let sidebarIdealWidth: CGFloat = 230
         static let sidebarMaxWidth: CGFloat = 280
-        static let contentMinWidth: CGFloat = 500
-        static let contentIdealWidth: CGFloat = 680
-        static let inspectorMinWidth: CGFloat = 300
         static let inspectorIdealWidth: CGFloat = 340
-        static let inspectorMaxWidth: CGFloat = 440
     }
 
     var body: some View {
         @Bindable var center = center
 
-        NavigationSplitView(columnVisibility: sidebarVisibility) {
+        NavigationSplitView(columnVisibility: $sidebarColumns.animation(.default)) {
             SidebarView(center: center)
                 .onGeometryChange(for: CGFloat.self) { proxy in
                     proxy.size.width
@@ -40,26 +44,28 @@ struct RootView: View {
                     max: Layout.sidebarMaxWidth
                 )
         } detail: {
-            DownloadsContentView(center: center)
-                .navigationSplitViewColumnWidth(
-                    min: Layout.contentMinWidth,
-                    ideal: Layout.contentIdealWidth
-                )
+            // The table's fixed columns must not set the split view's minimum width.
+            // Only its viewport shrinks; overflow stays in the table's native scroll view.
+            GeometryReader { geometry in
+                DownloadsContentView(center: center)
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+            }
                 .inspector(isPresented: inspectorPresentation) {
                     DownloadDetailView(center: center)
-                        .onGeometryChange(for: CGFloat.self) { proxy in
-                            proxy.size.width
-                        } action: { width in
-                            persistInspectorWidth(width)
-                        }
-                        .inspectorColumnWidth(
-                            min: Layout.inspectorMinWidth,
-                            ideal: restoredInspectorWidth,
-                            max: Layout.inspectorMaxWidth
-                        )
+                        .inspectorColumnWidth(Layout.inspectorIdealWidth)
                 }
         }
         .navigationSplitViewStyle(.balanced)
+        .onDisappear {
+            sidebarWidthSaveTask?.cancel()
+        }
+        .onChange(of: sidebarColumns) { _, visibility in
+            if visibility == .detailOnly {
+                isSidebarVisible = false
+            } else if visibility == .all || visibility == .doubleColumn {
+                isSidebarVisible = true
+            }
+        }
         .accessibilityIdentifier(HarborAccessibility.root)
         .searchable(text: $center.searchText, placement: .toolbar, prompt: "Search downloads")
         .searchFocused($isSearchFocused)
@@ -144,15 +150,11 @@ struct RootView: View {
         }
     }
 
-    private var sidebarVisibility: Binding<NavigationSplitViewVisibility> {
+    private var inspectorPresentation: Binding<Bool> {
         Binding(
-            get: { isSidebarVisible ? .all : .detailOnly },
-            set: { visibility in
-                if visibility == .detailOnly {
-                    isSidebarVisible = false
-                } else if visibility == .all || visibility == .doubleColumn {
-                    isSidebarVisible = true
-                }
+            get: { center.selectedDownload != nil },
+            set: { isPresented in
+                if isPresented == false { center.selectedDownloadIDs = [] }
             }
         )
     }
@@ -162,6 +164,7 @@ struct RootView: View {
     }
 
     private func persistSidebarWidth(_ width: CGFloat) {
+        sidebarWidthSaveTask?.cancel()
         // Ignore collapsed geometry so hiding the sidebar preserves its open width.
         guard isSidebarVisible,
               width.isFinite,
@@ -170,43 +173,10 @@ struct RootView: View {
 
         let clampedWidth = min(max(width, Layout.sidebarMinWidth), Layout.sidebarMaxWidth)
         guard abs(storedSidebarWidth - Double(clampedWidth)) >= 0.5 else { return }
-        storedSidebarWidth = Double(clampedWidth)
-    }
-
-    private var inspectorPresentation: Binding<Bool> {
-        Binding(
-            get: { center.selectedDownload != nil },
-            set: { isPresented in
-                if isPresented == false {
-                    center.selectedDownloadIDs = []
-                }
-            }
-        )
-    }
-
-    private var restoredInspectorWidth: CGFloat {
-        min(
-            max(CGFloat(storedInspectorWidth), Layout.inspectorMinWidth),
-            Layout.inspectorMaxWidth
-        )
-    }
-
-    private func persistInspectorWidth(_ width: CGFloat) {
-        guard width.isFinite,
-              width >= Layout.inspectorMinWidth - 1,
-              width <= Layout.inspectorMaxWidth + 1 else {
-            return
+        sidebarWidthSaveTask = Task { @MainActor in
+            do { try await Task.sleep(for: .milliseconds(300)) } catch { return }
+            storedSidebarWidth = Double(clampedWidth)
         }
-
-        let clampedWidth = min(
-            max(width, Layout.inspectorMinWidth),
-            Layout.inspectorMaxWidth
-        )
-        guard abs(storedInspectorWidth - Double(clampedWidth)) >= 0.5 else {
-            return
-        }
-
-        storedInspectorWidth = Double(clampedWidth)
     }
 
     private func loadExternalAddSources(_ providers: [NSItemProvider]) -> Bool {
@@ -249,20 +219,16 @@ private struct DownloadToolbarContent: ToolbarContent {
     @Bindable var settings: AppSettingsStore
 
     var body: some ToolbarContent {
-        ToolbarItem(placement: .primaryAction) {
-            HStack(spacing: 12) {
-                throughputMetric(
-                    systemImage: "arrow.down",
-                    value: DownloadFormatting.throughputString(center.totalDownloadSpeed),
-                    title: "Total download speed"
-                )
-                throughputMetric(
-                    systemImage: "arrow.up",
-                    value: DownloadFormatting.throughputString(center.totalUploadSpeed),
-                    title: "Total upload speed"
-                )
+        if #available(macOS 26, *) {
+            ToolbarItem(placement: .status) {
+                ToolbarTransferSpeeds(center: center)
+                    .padding(.horizontal, 8)
             }
-            .font(.callout)
+            .sharedBackgroundVisibility(.visible)
+        } else {
+            ToolbarItem(placement: .status) {
+                ToolbarTransferSpeeds(center: center)
+            }
         }
 
         ToolbarItem(placement: .primaryAction) {
@@ -314,12 +280,34 @@ private struct DownloadToolbarContent: ToolbarContent {
                     Label("Edit Limits…", systemImage: "gearshape")
                 }
             } label: {
-                Label(settings.trafficMode.title, systemImage: "speedometer")
+                Label(settings.trafficMode.title, systemImage: settings.trafficMode.systemImage)
                     .labelStyle(.titleAndIcon)
             }
             .help("Traffic Mode")
         }
 
+    }
+
+}
+
+private struct ToolbarTransferSpeeds: View {
+    let center: DownloadCenter
+
+    var body: some View {
+        HStack(spacing: 12) {
+            throughputMetric(
+                systemImage: "arrow.down",
+                value: DownloadFormatting.throughputString(center.totalDownloadSpeed),
+                title: "Total download speed"
+            )
+            throughputMetric(
+                systemImage: "arrow.up",
+                value: DownloadFormatting.throughputString(center.totalUploadSpeed),
+                title: "Total upload speed"
+            )
+        }
+        .font(.callout)
+        .frame(width: 164)
     }
 
     private func throughputMetric(
@@ -330,11 +318,14 @@ private struct DownloadToolbarContent: ToolbarContent {
         HStack(spacing: 4) {
             Image(systemName: systemImage)
                 .foregroundStyle(.secondary)
+                .frame(width: 12)
             Text(value)
                 .monospacedDigit()
                 .lineLimit(1)
-                .frame(width: 82, alignment: .trailing)
+                .minimumScaleFactor(0.75)
+                .frame(width: 60, alignment: .leading)
         }
+        .frame(width: 76, alignment: .leading)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(title))
         .accessibilityValue(value)
