@@ -139,6 +139,10 @@ final class HarborModelAndSafetyTests: XCTestCase {
         )
         let originalID = item.id
         let originalActivity = item.activityEvents
+        item.requestHeaders = [
+            RequestHeader(name: "Authorization", value: "Bearer source-secret"),
+            RequestHeader(name: "X-API-Key", value: "source-key")
+        ]
 
         DownloadCenter.configureDownloadedTorrentHandoff(
             item,
@@ -149,6 +153,7 @@ final class HarborModelAndSafetyTests: XCTestCase {
         XCTAssertEqual(item.sourceURL, sourceURL)
         XCTAssertEqual(item.sourceKind, .torrentFile)
         XCTAssertEqual(item.backend, .aria2)
+        XCTAssertTrue(item.requestHeaders.isEmpty)
         XCTAssertEqual(item.status, .preparing)
         XCTAssertEqual(item.activityEvents, originalActivity)
         XCTAssertNil(item.preferredFilename)
@@ -558,6 +563,23 @@ final class HarborModelAndSafetyTests: XCTestCase {
             }
             XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "application/octet-stream")
         }
+    }
+
+    func testFreshDownloadIgnoresCustomRangeHeaders() throws {
+        let sourceURL = try XCTUnwrap(URL(string: "https://example.com/archive.bin"))
+        let request = DirectDownloadResponsePolicy.request(
+            sourceURL: sourceURL,
+            recovery: nil,
+            requestHeaders: [
+                RequestHeader(name: "Range", value: "bytes=100-"),
+                RequestHeader(name: "If-Range", value: "\"stale-etag\""),
+                RequestHeader(name: "X-Client", value: "Harbor")
+            ]
+        )
+
+        XCTAssertNil(request.value(forHTTPHeaderField: "Range"))
+        XCTAssertNil(request.value(forHTTPHeaderField: "If-Range"))
+        XCTAssertEqual(request.value(forHTTPHeaderField: "X-Client"), "Harbor")
     }
 
     func testDirectDownloadRequestPreservesHeadersAndRecoveryInvariants() throws {

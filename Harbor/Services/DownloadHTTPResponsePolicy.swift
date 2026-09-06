@@ -241,6 +241,9 @@ enum DirectDownloadResponsePolicy {
         requestHeaders.apply(to: &request)
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
+        // Harbor owns byte ranges so custom headers cannot request a partial file.
+        request.setValue(nil, forHTTPHeaderField: "Range")
+        request.setValue(nil, forHTTPHeaderField: "If-Range")
 
         if let recovery,
            let validator = recovery.metadata.ifRangeValidator {

@@ -1459,6 +1459,8 @@ extension DownloadCoordinator: URLSessionDataDelegate {
             originatingAt: context.sourceURL
         )
         redirectedRequest.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
+        redirectedRequest.setValue(nil, forHTTPHeaderField: "Range")
+        redirectedRequest.setValue(nil, forHTTPHeaderField: "If-Range")
         if state.resumeOffset > 0 {
             redirectedRequest.setValue(
                 "bytes=\(state.resumeOffset)-",

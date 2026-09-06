@@ -7464,6 +7464,8 @@ final class DownloadCenter {
     ) {
         item.sourceKind = .torrentFile
         item.backend = .aria2
+        // Source-server headers are not approved for this torrent's trackers or web seeds.
+        item.requestHeaders = []
         item.preferredFilename = nil
         item.fileLocationPath = nil
         item.progress = 0
