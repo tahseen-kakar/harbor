@@ -632,7 +632,8 @@ private struct DownloadProfileMenu: View {
             }
             .font(.headline)
         }
-        .menuStyle(.borderlessButton)
+        .menuStyle(.button)
+        .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
         .disabled(item.status == .browserSessionRequired || center.activeBrowserSession?.downloadID == item.id)

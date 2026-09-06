@@ -474,11 +474,16 @@ struct AddDownloadSheet: View {
     }
 
     private var destinationPicker: some View {
-        LabeledContent("Destination") {
+        HStack(spacing: 16) {
+            Text("Destination")
+                .fixedSize()
             HStack(spacing: 8) {
                 Text(destinationPath)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    .truncationMode(.head)
+                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .trailing)
+                    .help(destinationPath)
                     .textSelection(.enabled)
 
                 Button("Choose…") {
@@ -491,11 +496,13 @@ struct AddDownloadSheet: View {
                     destinationPath = folder.path
                     hasCustomizedDestination = true
                 }
+                .fixedSize()
 
                 Button("Use Default") {
                     destinationPath = sourceAwareDefaultDestinationPath
                     hasCustomizedDestination = false
                 }
+                .fixedSize()
                 .disabled(destinationPath == sourceAwareDefaultDestinationPath)
             }
         }
@@ -511,6 +518,7 @@ struct AddDownloadSheet: View {
             .padding(.top, 10)
             .padding(.leading, 24)
         }
+        .disclosureGroupStyle(AdvancedSettingsDisclosureStyle())
     }
 
     private var sourceAwareDefaultDestinationPath: String {
@@ -1159,5 +1167,32 @@ struct AddDownloadSheet: View {
 
         return suffixes.contains { host == $0 || host.hasSuffix(".\($0)") }
             || host.contains("pinterest.")
+    }
+}
+
+private struct AdvancedSettingsDisclosureStyle: DisclosureGroupStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation {
+                    configuration.isExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: configuration.isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .frame(width: 12)
+                    configuration.label
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityValue(configuration.isExpanded ? Text("Expanded") : Text("Collapsed"))
+
+            if configuration.isExpanded {
+                configuration.content
+            }
+        }
     }
 }

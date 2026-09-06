@@ -68,14 +68,14 @@ struct TorrentsSettingsTab: View {
             Section("Automation") {
                 Toggle("Watch a folder for torrent files", isOn: $settings.torrentWatchFolderEnabled)
 
-                DestinationFolderRow(
-                    title: "Watch Folder",
-                    path: settings.torrentWatchFolderPath,
-                    choose: settings.chooseTorrentWatchFolder,
-                    reveal: settings.revealTorrentWatchFolder
-                )
-
                 if settings.torrentWatchFolderEnabled {
+                    DestinationFolderRow(
+                        title: "Watch Folder",
+                        path: settings.torrentWatchFolderPath,
+                        choose: settings.chooseTorrentWatchFolder,
+                        reveal: settings.revealTorrentWatchFolder
+                    )
+
                     TorrentWatchStatusRow(status: settings.torrentWatchFolderStatus)
                 }
             }
@@ -186,23 +186,7 @@ struct BandwidthSettingsTab: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("Connections") {
-                Stepper(
-                    value: $settings.maxConcurrentDownloads,
-                    in: AppSettingsStore.maxConcurrentDownloadsRange
-                ) {
-                    LabeledContent("Max Active Downloads", value: "\(settings.maxConcurrentDownloads)")
-                }
-
-                Stepper(
-                    value: $settings.perDownloadConnectionCount,
-                    in: AppSettingsStore.perDownloadConnectionCountRange
-                ) {
-                    LabeledContent("Connections per Download", value: "\(settings.perDownloadConnectionCount)")
-                }
-            }
-
-            Section("Custom Download Limits") {
+            Section("Custom Limits") {
                 SpeedLimitRow(
                     title: "Global Download Limit",
                     isEnabled: $settings.globalSpeedLimitEnabled,
@@ -216,9 +200,7 @@ struct BandwidthSettingsTab: View {
                         kilobytesPerSecond: $settings.perDownloadSpeedLimitKilobytesPerSecond
                     )
                 }
-            }
 
-            Section("Custom Upload Limits") {
                 SpeedLimitRow(
                     title: "Global Upload Limit",
                     isEnabled: $settings.globalUploadSpeedLimitEnabled,
@@ -231,6 +213,22 @@ struct BandwidthSettingsTab: View {
                         isEnabled: $settings.perDownloadUploadSpeedLimitEnabled,
                         kilobytesPerSecond: $settings.perDownloadUploadSpeedLimitKilobytesPerSecond
                     )
+                }
+            }
+
+            Section("Connections") {
+                Stepper(
+                    value: $settings.maxConcurrentDownloads,
+                    in: AppSettingsStore.maxConcurrentDownloadsRange
+                ) {
+                    LabeledContent("Max Active Downloads", value: "\(settings.maxConcurrentDownloads)")
+                }
+
+                Stepper(
+                    value: $settings.perDownloadConnectionCount,
+                    in: AppSettingsStore.perDownloadConnectionCountRange
+                ) {
+                    LabeledContent("Connections per Download", value: "\(settings.perDownloadConnectionCount)")
                 }
             }
         }
@@ -279,23 +277,24 @@ private struct DestinationFolderRow: View {
     let reveal: () -> Void
 
     var body: some View {
-        LabeledContent {
-            VStack(alignment: .trailing, spacing: 8) {
+        HStack(spacing: 16) {
+            Text(title)
+                .fixedSize()
+
+            HStack(spacing: 8) {
                 Text(path)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                    .truncationMode(.middle)
+                    .truncationMode(.head)
+                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .trailing)
                     .textSelection(.enabled)
                     .help(path)
 
-                HStack(spacing: 8) {
-                    Button("Choose…", action: choose)
-                    Button("Reveal", action: reveal)
-                }
+                Button("Choose…", action: choose)
+                    .fixedSize()
+                Button("Reveal", action: reveal)
+                    .fixedSize()
             }
-            .frame(maxWidth: 390, alignment: .trailing)
-        } label: {
-            Text(title)
         }
     }
 }

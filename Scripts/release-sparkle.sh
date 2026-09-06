@@ -221,6 +221,7 @@ prepare_release_app() {
     -scheme "$SCHEME" \
     -configuration "$CONFIGURATION" \
     -destination 'generic/platform=macOS' \
+    -derivedDataPath "$PROJECT_DIR/build/HarborDerivedData" \
     -archivePath "$ARCHIVE_PATH" \
     archive
 

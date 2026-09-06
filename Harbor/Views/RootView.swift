@@ -8,6 +8,8 @@ struct RootView: View {
     private var isSidebarVisible = false
     @AppStorage("downloads.sidebar.width")
     private var storedSidebarWidth = Double(Layout.sidebarIdealWidth)
+    @AppStorage("downloads.inspector.width")
+    private var storedInspectorWidth = Double(Layout.inspectorIdealWidth)
     @State private var sidebarColumns: NavigationSplitViewVisibility
     @State private var sidebarWidthSaveTask: Task<Void, Never>?
     @State private var isDownloadDropTargeted = false
@@ -52,7 +54,14 @@ struct RootView: View {
             }
                 .inspector(isPresented: inspectorPresentation) {
                     DownloadDetailView(center: center)
-                        .inspectorColumnWidth(Layout.inspectorIdealWidth)
+                        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
+                            // Closing geometry must not overwrite the last open width.
+                            guard center.selectedDownload != nil,
+                                  width >= 300, width <= 600,
+                                  abs(storedInspectorWidth - Double(width)) >= 1 else { return }
+                            storedInspectorWidth = Double(width)
+                        }
+                        .inspectorColumnWidth(min: 300, ideal: min(max(storedInspectorWidth, 300), 600), max: 600)
                 }
                 // Keep app controls in the navigation toolbar, above both content panes.
                 .searchable(text: $center.searchText, placement: .toolbar, prompt: "Search downloads")
