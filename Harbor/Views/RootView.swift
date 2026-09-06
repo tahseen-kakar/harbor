@@ -54,6 +54,13 @@ struct RootView: View {
                     DownloadDetailView(center: center)
                         .inspectorColumnWidth(Layout.inspectorIdealWidth)
                 }
+                // Keep app controls in the navigation toolbar, above both content panes.
+                .searchable(text: $center.searchText, placement: .toolbar, prompt: "Search downloads")
+                .searchFocused($isSearchFocused)
+                // TODO: Revisit customizable toolbars after macOS 26 stops crashing while restoring toolbar items during file opens.
+                .toolbar {
+                    DownloadToolbarContent(center: center, settings: settings)
+                }
         }
         .navigationSplitViewStyle(.balanced)
         .onDisappear {
@@ -67,8 +74,6 @@ struct RootView: View {
             }
         }
         .accessibilityIdentifier(HarborAccessibility.root)
-        .searchable(text: $center.searchText, placement: .toolbar, prompt: "Search downloads")
-        .searchFocused($isSearchFocused)
         .focusedSceneValue(\.focusDownloadSearch, focusSearch)
         .sheet(item: $center.addSheetDraft, onDismiss: {
             center.handleAddSheetDismissal()
@@ -129,10 +134,6 @@ struct RootView: View {
             }
         } message: {
             Text(center.activeAlert?.message ?? "")
-        }
-        // TODO: Revisit customizable toolbars after macOS 26 stops crashing while restoring toolbar items during file opens.
-        .toolbar {
-            DownloadToolbarContent(center: center, settings: settings)
         }
         .onDrop(
             of: DownloadSourceImportService.supportedContentTypes,
@@ -220,13 +221,14 @@ private struct DownloadToolbarContent: ToolbarContent {
 
     var body: some ToolbarContent {
         if #available(macOS 26, *) {
-            ToolbarItem(placement: .status) {
+            ToolbarItem(placement: .primaryAction) {
                 ToolbarTransferSpeeds(center: center)
                     .padding(.horizontal, 8)
             }
             .sharedBackgroundVisibility(.visible)
+            ToolbarSpacer(.fixed, placement: .primaryAction)
         } else {
-            ToolbarItem(placement: .status) {
+            ToolbarItem(placement: .primaryAction) {
                 ToolbarTransferSpeeds(center: center)
             }
         }
