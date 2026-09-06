@@ -145,14 +145,6 @@ struct AddDownloadSheet: View {
             }
 
             HStack {
-                if entryMode == .linkOrMagnet {
-                    Button("Paste Link") {
-                        sourceURLText = NSPasteboard.general.string(forType: .string) ?? sourceURLText
-                        scheduleMediaPreviewRefresh()
-                    }
-                    .accessibilityIdentifier(HarborAccessibility.addPaste)
-                }
-
                 Spacer()
 
                 Button("Cancel") {

@@ -32,7 +32,6 @@ enum HarborAccessibility {
     static let addSource = "add-download.source"
     static let addChooseTorrent = "add-download.choose-torrent"
     static let addStartImmediately = "add-download.start-immediately"
-    static let addPaste = "add-download.paste"
     static let addCancel = "add-download.cancel"
     static let addPreview = "add-download.preview"
     static let addSubmit = "add-download.submit"

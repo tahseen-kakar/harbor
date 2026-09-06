@@ -560,7 +560,14 @@ private struct DownloadTransferSection: View {
     let center: DownloadCenter
 
     var body: some View {
-        DownloadDetailSection(title: "Transfer") {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Transfer")
+                Spacer()
+                DownloadProfileMenu(item: item, center: center)
+            }
+            .font(.headline)
+
             VStack(spacing: 0) {
                 DownloadedTransferRow(item: item)
 
@@ -569,17 +576,95 @@ private struct DownloadTransferSection: View {
                     TorrentSharingRow(item: item)
                 }
 
-                if let eta = item.etaText {
+                if item.status == .downloading {
                     Divider()
-                    DownloadValueRow(title: "ETA", value: eta)
+                    DownloadValueRow(title: "ETA", value: item.etaText ?? "—")
                 }
 
-                if HarborFeatureFlags.perDownloadTransferLimits {
-                    Divider()
-                    TransferLimitControls(item: item, center: center)
-                }
             }
         }
+    }
+}
+
+private struct DownloadProfileMenu: View {
+    let item: DownloadItem
+    let center: DownloadCenter
+    @State private var showsCustomLimits = false
+
+    private var inheritsGlobal: Bool {
+        item.downloadLimitOverride == .inherit
+            && (item.backend != .aria2 || item.uploadLimitOverride == .inherit)
+    }
+
+    private var currentMode: TrafficMode {
+        if inheritsGlobal { return center.globalTrafficMode }
+        return [TrafficMode.unlimited, .balanced, .quiet].first { mode in
+            let limits = mode.applying(to: .default)
+            return item.downloadLimitOverride == limitOverride(for: limits.perDownloadSpeedLimitBytesPerSecond)
+                && (item.backend != .aria2
+                    || item.uploadLimitOverride == limitOverride(for: limits.perDownloadUploadSpeedLimitBytesPerSecond))
+        } ?? .custom
+    }
+
+    var body: some View {
+        Menu {
+            Button {
+                center.setDownloadLimitOverride(.inherit, for: item.id)
+                center.setUploadLimitOverride(.inherit, for: item.id)
+            } label: {
+                if inheritsGlobal {
+                    Label("Use Global", systemImage: "checkmark")
+                } else {
+                    Text("Use Global")
+                }
+            }
+            Divider()
+            ForEach(TrafficMode.allCases) { mode in
+                Button {
+                    if mode == .custom {
+                        showsCustomLimits = true
+                    } else {
+                        let limits = mode.applying(to: .default)
+                        center.setDownloadLimitOverride(
+                            limitOverride(for: limits.perDownloadSpeedLimitBytesPerSecond), for: item.id
+                        )
+                        center.setUploadLimitOverride(
+                            limitOverride(for: limits.perDownloadUploadSpeedLimitBytesPerSecond), for: item.id
+                        )
+                    }
+                } label: {
+                    if inheritsGlobal == false, currentMode == mode {
+                        Label(mode.title, systemImage: "checkmark")
+                    } else {
+                        Text(mode.title)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Text(currentMode.title)
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.semibold))
+            }
+            .font(.headline)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .disabled(item.status == .browserSessionRequired || center.activeBrowserSession?.downloadID == item.id)
+        .help("Set this download’s speed profile. Global bandwidth limits still apply.")
+        .popover(isPresented: $showsCustomLimits) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Custom Limits").font(.headline)
+                TransferLimitControls(item: item, center: center)
+            }
+            .padding(16)
+            .frame(width: 380)
+        }
+    }
+
+    private func limitOverride(for bytesPerSecond: Int64?) -> TransferLimitOverride {
+        bytesPerSecond.map { .limited(kilobytesPerSecond: Int($0 / 1_024)) } ?? .unlimited
     }
 }
 
@@ -588,14 +673,18 @@ private struct TorrentSharingRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
-            metric(title: "Uploaded", value: item.uploadedText)
-            Spacer(minLength: 12)
-            metric(title: "Share Ratio", value: item.shareRatioText)
+            TransferMetric(title: "Uploaded", value: item.uploadedText)
+            TransferMetric(title: "Share Ratio", value: item.shareRatioText)
         }
         .padding(.vertical, 9)
     }
+}
 
-    private func metric(title: LocalizedStringKey, value: String) -> some View {
+private struct TransferMetric: View {
+    let title: LocalizedStringKey
+    let value: String
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
                 .font(.caption.weight(.medium))
@@ -605,7 +694,11 @@ private struct TorrentSharingRow: View {
                 .font(.callout)
                 .foregroundStyle(.primary)
                 .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .textSelection(.enabled)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -748,81 +841,25 @@ private struct DownloadedTransferRow: View {
     let item: DownloadItem
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
+        // Keep the layout independent of the changing speed text width.
+        VStack(alignment: .leading, spacing: 0) {
+            TransferMetric(title: "Downloaded", value: item.progressText)
+                .padding(.vertical, 9)
+
+            Divider()
+
             HStack(alignment: .top, spacing: 14) {
-                downloadedValue
-                Spacer(minLength: 12)
-                speedValues
-            }
-            .padding(.vertical, 9)
-
-            VStack(alignment: .leading, spacing: 8) {
-                downloadedValue
-                speedValues
-            }
-            .padding(.vertical, 9)
-        }
-    }
-
-    private var downloadedValue: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Downloaded")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
-
-            Text(item.progressText)
-                .font(.callout)
-                .foregroundStyle(.primary)
-                .lineLimit(3)
-                .textSelection(.enabled)
-        }
-    }
-
-    private var speedValues: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Speed")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
-
-            HStack(spacing: 14) {
-                SpeedValue(
-                    systemImage: "arrow.down",
-                    value: item.speedText,
-                    accessibilityLabel: "Download speed"
-                )
+                TransferMetric(title: "Download speed", value: item.speedText)
 
                 if item.backend == .aria2 {
-                    SpeedValue(
-                        systemImage: "arrow.up",
-                        value: DownloadFormatting.throughputString(item.uploadBytesPerSecond),
-                        accessibilityLabel: "Upload speed"
+                    TransferMetric(
+                        title: "Upload speed",
+                        value: DownloadFormatting.throughputString(item.uploadBytesPerSecond)
                     )
                 }
             }
+            .padding(.vertical, 9)
         }
-    }
-}
-
-private struct SpeedValue: View {
-    let systemImage: String
-    let value: String
-    let accessibilityLabel: String
-
-    var body: some View {
-        Label {
-            Text(value)
-                .font(.callout)
-                .foregroundStyle(.primary)
-                .monospacedDigit()
-                .textSelection(.enabled)
-        } icon: {
-            Image(systemName: systemImage)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 14)
-                .accessibilityHidden(true)
-        }
-        .accessibilityLabel("\(accessibilityLabel): \(value)")
     }
 }
 

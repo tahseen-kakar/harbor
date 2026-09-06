@@ -6,6 +6,10 @@ struct RootView: View {
     let settings: AppSettingsStore
     @AppStorage("downloads.inspector.width")
     private var storedInspectorWidth = Double(Layout.inspectorIdealWidth)
+    @AppStorage("downloads.sidebar.isVisible")
+    private var isSidebarVisible = false
+    @AppStorage("downloads.sidebar.width")
+    private var storedSidebarWidth = Double(Layout.sidebarIdealWidth)
     @State private var isDownloadDropTargeted = false
     @FocusState private var isSearchFocused: Bool
 
@@ -23,11 +27,16 @@ struct RootView: View {
     var body: some View {
         @Bindable var center = center
 
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: sidebarVisibility) {
             SidebarView(center: center)
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.size.width
+                } action: { width in
+                    persistSidebarWidth(width)
+                }
                 .navigationSplitViewColumnWidth(
                     min: Layout.sidebarMinWidth,
-                    ideal: Layout.sidebarIdealWidth,
+                    ideal: restoredSidebarWidth,
                     max: Layout.sidebarMaxWidth
                 )
         } detail: {
@@ -135,6 +144,35 @@ struct RootView: View {
         }
     }
 
+    private var sidebarVisibility: Binding<NavigationSplitViewVisibility> {
+        Binding(
+            get: { isSidebarVisible ? .all : .detailOnly },
+            set: { visibility in
+                if visibility == .detailOnly {
+                    isSidebarVisible = false
+                } else if visibility == .all || visibility == .doubleColumn {
+                    isSidebarVisible = true
+                }
+            }
+        )
+    }
+
+    private var restoredSidebarWidth: CGFloat {
+        min(max(CGFloat(storedSidebarWidth), Layout.sidebarMinWidth), Layout.sidebarMaxWidth)
+    }
+
+    private func persistSidebarWidth(_ width: CGFloat) {
+        // Ignore collapsed geometry so hiding the sidebar preserves its open width.
+        guard isSidebarVisible,
+              width.isFinite,
+              width >= Layout.sidebarMinWidth - 1,
+              width <= Layout.sidebarMaxWidth + 1 else { return }
+
+        let clampedWidth = min(max(width, Layout.sidebarMinWidth), Layout.sidebarMaxWidth)
+        guard abs(storedSidebarWidth - Double(clampedWidth)) >= 0.5 else { return }
+        storedSidebarWidth = Double(clampedWidth)
+    }
+
     private var inspectorPresentation: Binding<Bool> {
         Binding(
             get: { center.selectedDownload != nil },
@@ -212,6 +250,22 @@ private struct DownloadToolbarContent: ToolbarContent {
 
     var body: some ToolbarContent {
         ToolbarItem(placement: .primaryAction) {
+            HStack(spacing: 12) {
+                throughputMetric(
+                    systemImage: "arrow.down",
+                    value: DownloadFormatting.throughputString(center.totalDownloadSpeed),
+                    title: "Total download speed"
+                )
+                throughputMetric(
+                    systemImage: "arrow.up",
+                    value: DownloadFormatting.throughputString(center.totalUploadSpeed),
+                    title: "Total upload speed"
+                )
+            }
+            .font(.callout)
+        }
+
+        ToolbarItem(placement: .primaryAction) {
             Button("New Download", systemImage: "plus") {
                 center.presentAddSheet()
             }
@@ -266,13 +320,27 @@ private struct DownloadToolbarContent: ToolbarContent {
             .help("Traffic Mode")
         }
 
-        ToolbarItem(placement: .primaryAction) {
-            Button("Reveal", systemImage: "folder") {
-                center.revealSelectedInFinder()
-            }
-            .disabled(center.selectedDownload == nil)
-        }
     }
+
+    private func throughputMetric(
+        systemImage: String,
+        value: String,
+        title: LocalizedStringKey
+    ) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: systemImage)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .monospacedDigit()
+                .lineLimit(1)
+                .frame(width: 82, alignment: .trailing)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(title))
+        .accessibilityValue(value)
+        .help(Text(title))
+    }
+
 }
 
 #Preview("Harbor Window") {

@@ -1798,6 +1798,8 @@ final class DownloadCenter {
         downloads.filter { filter.includes($0) }.count
     }
 
+    var globalTrafficMode: TrafficMode { settings.trafficMode }
+
     func setDownloadLimitOverride(
         _ limitOverride: TransferLimitOverride,
         for id: UUID
