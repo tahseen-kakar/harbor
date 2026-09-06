@@ -93,6 +93,8 @@ final class AppSettingsStore {
         static let perDownloadUploadSpeedLimitEnabled = "perDownloadUploadSpeedLimitEnabled"
         static let perDownloadUploadSpeedLimitKilobytesPerSecond = "perDownloadUploadSpeedLimitKilobytesPerSecond"
         static let perDownloadConnectionCount = "perDownloadConnectionCount"
+        static let networkBindingSelection = "torrentNetworkBindingSelection"
+        static let networkBindingDisplayName = "torrentNetworkBindingDisplayName"
     }
 
     static let maxConcurrentDownloadsRange = 1 ... 16
@@ -102,8 +104,10 @@ final class AppSettingsStore {
 
     private let userDefaults: UserDefaults
     @ObservationIgnored private let loginItemController: any LoginItemControlling
+    @ObservationIgnored private let networkBindingCatalog: any NetworkBindingCataloging
     @ObservationIgnored var transferSettingsDidChange: ((DownloadTransferSettings) -> Void)?
     @ObservationIgnored var torrentAutomationSettingsDidChange: (() -> Void)?
+    @ObservationIgnored var networkBindingDidChange: ((NetworkBindingSelection) -> Void)?
 
     var defaultDestinationPath: String {
         didSet {
@@ -154,6 +158,29 @@ final class AppSettingsStore {
     }
 
     private(set) var torrentWatchFolderStatus: TorrentWatchFolderStatus = .stopped
+
+    var networkBindingSelection: NetworkBindingSelection {
+        didSet {
+            userDefaults.set(
+                networkBindingSelection.storageValue,
+                forKey: Keys.networkBindingSelection
+            )
+            rememberNetworkBindingDisplayName()
+            networkBindingDidChange?(networkBindingSelection)
+        }
+    }
+
+    private(set) var availableNetworkBindingTargets: [NetworkBindingTarget] = [.any]
+    private(set) var networkBindingStatus: NetworkBindingStatus = .unrestricted
+
+    private var storedNetworkBindingDisplayName: String {
+        didSet {
+            userDefaults.set(
+                storedNetworkBindingDisplayName,
+                forKey: Keys.networkBindingDisplayName
+            )
+        }
+    }
 
     var maxConcurrentDownloads: Int {
         didSet {
@@ -277,11 +304,13 @@ final class AppSettingsStore {
 
     init(
         userDefaults: UserDefaults = .standard,
-        loginItemController: (any LoginItemControlling)? = nil
+        loginItemController: (any LoginItemControlling)? = nil,
+        networkBindingCatalog: (any NetworkBindingCataloging)? = nil
     ) {
         self.userDefaults = userDefaults
         let resolvedLoginItemController = loginItemController ?? SystemLoginItemController()
         self.loginItemController = resolvedLoginItemController
+        self.networkBindingCatalog = networkBindingCatalog ?? SystemNetworkBindingCatalog()
 
         let defaultDownloadsPath = FileManager.default.urls(
             for: .downloadsDirectory,
@@ -376,6 +405,16 @@ final class AppSettingsStore {
             storedConnectionCount == 0 ? 4 : storedConnectionCount,
             to: Self.perDownloadConnectionCountRange
         )
+
+        let storedSelection = NetworkBindingSelection(
+            storageValue: userDefaults.string(forKey: Keys.networkBindingSelection) ?? ""
+        )
+        self.networkBindingSelection = storedSelection
+        self.storedNetworkBindingDisplayName = userDefaults
+            .string(forKey: Keys.networkBindingDisplayName)
+            ?? Self.fallbackDisplayName(for: storedSelection)
+
+        refreshNetworkBindingTargets()
     }
 
     func refreshStartAtLoginStatus() {
@@ -493,6 +532,74 @@ final class AppSettingsStore {
 
     func updateTorrentWatchFolderStatus(_ status: TorrentWatchFolderStatus) {
         torrentWatchFolderStatus = status
+    }
+
+    func updateNetworkBindingStatus(_ status: NetworkBindingStatus) {
+        networkBindingStatus = status
+    }
+
+    func refreshNetworkBindingTargets() {
+        availableNetworkBindingTargets = networkBindingCatalog.availableTargets()
+        rememberNetworkBindingDisplayName()
+    }
+
+    /// The name to show for the current selection, falling back to the name it
+    /// carried the last time it existed.
+    var networkBindingDisplayName: String {
+        availableNetworkBindingTargets
+            .first { $0.selection == networkBindingSelection }?
+            .displayName
+            ?? storedNetworkBindingDisplayName
+    }
+
+    /// Keeps a selection that has disappeared, such as a removed VPN service,
+    /// visible in the picker instead of silently reverting to "Automatic".
+    var networkBindingPickerTargets: [NetworkBindingTarget] {
+        var targets = availableNetworkBindingTargets
+        guard targets.contains(where: { $0.selection == networkBindingSelection }) == false else {
+            return targets
+        }
+
+        targets.append(
+            NetworkBindingTarget(
+                selection: networkBindingSelection,
+                displayName: String(
+                    format: String(
+                        localized: "network.binding.missingTarget",
+                        defaultValue: "%@ (unavailable)",
+                        comment: "Picker label for a stored network selection that no longer exists."
+                    ),
+                    networkBindingDisplayName
+                ),
+                kind: .service
+            )
+        )
+        return targets
+    }
+
+    private func rememberNetworkBindingDisplayName() {
+        guard let displayName = availableNetworkBindingTargets
+            .first(where: { $0.selection == networkBindingSelection })?
+            .displayName else {
+            return
+        }
+
+        storedNetworkBindingDisplayName = displayName
+    }
+
+    private static func fallbackDisplayName(for selection: NetworkBindingSelection) -> String {
+        switch selection {
+        case .any:
+            NetworkBindingTarget.any.displayName
+        case let .interface(name):
+            name
+        case .service:
+            String(
+                localized: "network.binding.unknownService",
+                defaultValue: "Unknown network",
+                comment: "Placeholder for a stored VPN or network service Harbor can no longer find."
+            )
+        }
     }
 
     private func notifyTransferSettingsChanged() {
