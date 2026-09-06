@@ -227,6 +227,7 @@ final class DownloadCoordinator: NSObject, @unchecked Sendable {
         let downloadID: UUID
         let attemptIdentifier: UUID
         let sourceURL: URL
+        let requestHeaders: [RequestHeader]
         let session: URLSession
         let task: URLSessionTask
         var state: OwnedPartialState
@@ -335,6 +336,7 @@ final class DownloadCoordinator: NSObject, @unchecked Sendable {
         id: UUID,
         attemptIdentifier: UUID = UUID(),
         sourceURL: URL,
+        requestHeaders: [RequestHeader] = [],
         speedLimitOverride: TransferLimitOverride = .inherit
     ) throws -> Int {
         guard stateLock.withLock({
@@ -366,7 +368,8 @@ final class DownloadCoordinator: NSObject, @unchecked Sendable {
         let task = session.dataTask(
             with: DirectDownloadResponsePolicy.request(
                 sourceURL: sourceURL,
-                recovery: preparation.snapshot
+                recovery: preparation.snapshot,
+                requestHeaders: requestHeaders
             )
         )
         let ownedRecovery = preparation.snapshot
@@ -377,6 +380,7 @@ final class DownloadCoordinator: NSObject, @unchecked Sendable {
             downloadID: id,
             attemptIdentifier: attemptIdentifier,
             sourceURL: sourceURL,
+            requestHeaders: requestHeaders,
             session: session,
             task: task,
             state: OwnedPartialState(
@@ -1450,6 +1454,10 @@ extension DownloadCoordinator: URLSessionDataDelegate {
         let state = context.state
 
         var redirectedRequest = request
+        context.requestHeaders.apply(
+            toSameOriginRedirect: &redirectedRequest,
+            originatingAt: context.sourceURL
+        )
         redirectedRequest.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
         if state.resumeOffset > 0 {
             redirectedRequest.setValue(

@@ -452,7 +452,7 @@ final class NetworkBindingTests: XCTestCase {
             networkBindingMonitor: monitor,
             torrentService: Aria2TorrentService(daemonStartupOperation: { _ in }),
             torrentPauseOperation: { _, _ in },
-            torrentStartOperation: { _, _, sourceURL, _, _ in
+            torrentStartOperation: { _, _, sourceURL, _, _, _ in
                 startLog.record(sourceURL.absoluteString)
                 return "resumed-gid"
             }

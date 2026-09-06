@@ -487,6 +487,141 @@ final class HarborModelAndSafetyTests: XCTestCase {
         )
     }
 
+    func testRequestHeaderValidationAndSensitiveDetection() {
+        XCTAssertNil(RequestHeader(name: "User-Agent", value: "Harbor\t1.0").validationIssue)
+        XCTAssertEqual(RequestHeader(name: "Bad Header", value: "value").validationIssue, .invalidName)
+
+        for value in ["line\nbreak", "line\rbreak", "nul\u{0}byte", "delete\u{7F}byte"] {
+            XCTAssertEqual(
+                RequestHeader(name: "X-Test", value: value).validationIssue,
+                .invalidValue
+            )
+        }
+
+        XCTAssertTrue(RequestHeader(name: "cookie", value: "session=secret").triggersSensitiveTorrentWarning)
+        XCTAssertTrue(RequestHeader(name: "AUTHORIZATION", value: "Bearer secret").triggersSensitiveTorrentWarning)
+        XCTAssertFalse(RequestHeader(name: "Referer", value: "https://example.com").triggersSensitiveTorrentWarning)
+    }
+
+    func testRequestHeadersApplyOnlyToSameOriginRedirects() throws {
+        let sourceURL = try XCTUnwrap(URL(string: "https://example.com/source"))
+        let headers = [
+            RequestHeader(name: "Authorization", value: "Bearer secret"),
+            RequestHeader(name: "X-Client", value: "Harbor")
+        ]
+
+        var sameOriginRequest = URLRequest(
+            url: try XCTUnwrap(URL(string: "https://example.com/redirected"))
+        )
+        headers.apply(toSameOriginRedirect: &sameOriginRequest, originatingAt: sourceURL)
+        XCTAssertEqual(
+            sameOriginRequest.value(forHTTPHeaderField: "Authorization"),
+            "Bearer secret"
+        )
+        XCTAssertEqual(sameOriginRequest.value(forHTTPHeaderField: "X-Client"), "Harbor")
+
+        var crossOriginRequest = URLRequest(
+            url: try XCTUnwrap(URL(string: "https://downloads.example.net/file"))
+        )
+        headers.apply(toSameOriginRedirect: &crossOriginRequest, originatingAt: sourceURL)
+        XCTAssertNil(crossOriginRequest.value(forHTTPHeaderField: "Authorization"))
+        XCTAssertNil(crossOriginRequest.value(forHTTPHeaderField: "X-Client"))
+    }
+
+    func testCrossOriginRedirectsRemoveAlreadyPopulatedCustomHeaders() throws {
+        let sourceURL = try XCTUnwrap(URL(string: "https://example.com/source"))
+        let headers = [
+            RequestHeader(name: "Authorization", value: "Bearer secret"),
+            RequestHeader(name: "Cookie", value: "session=secret"),
+            RequestHeader(name: "X-API-Key", value: "secret-key"),
+            RequestHeader(name: "User-Agent", value: "Harbor")
+        ]
+
+        for redirectedURL in [
+            "https://downloads.example.net/file",
+            "http://example.com/file",
+            "https://example.com:8443/file"
+        ] {
+            var request = URLRequest(url: try XCTUnwrap(URL(string: redirectedURL)))
+            for header in headers {
+                request.setValue(header.value, forHTTPHeaderField: header.name.lowercased())
+            }
+            request.setValue("application/octet-stream", forHTTPHeaderField: "Accept")
+
+            headers.apply(toSameOriginRedirect: &request, originatingAt: sourceURL)
+
+            for header in headers {
+                XCTAssertNil(
+                    request.value(forHTTPHeaderField: header.name),
+                    "\(header.name) was forwarded to \(redirectedURL)"
+                )
+            }
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "application/octet-stream")
+        }
+    }
+
+    func testDirectDownloadRequestPreservesHeadersAndRecoveryInvariants() throws {
+        let sourceURL = try XCTUnwrap(URL(string: "https://example.com/archive.bin"))
+        let recovery = DirectDownloadRecoverySnapshot(
+            bytesWritten: 128,
+            metadata: DirectDownloadRecoveryMetadata(
+                sourceURL: sourceURL,
+                entityTag: "\"current-etag\"",
+                lastModified: nil,
+                expectedBytes: 1_024,
+                suggestedFilename: nil,
+                mimeType: nil
+            )
+        )
+
+        let request = DirectDownloadResponsePolicy.request(
+            sourceURL: sourceURL,
+            recovery: recovery,
+            requestHeaders: [
+                RequestHeader(name: "X-Client", value: "Harbor"),
+                RequestHeader(name: "Accept-Encoding", value: "gzip"),
+                RequestHeader(name: "Range", value: "bytes=0-1"),
+                RequestHeader(name: "If-Range", value: "\"stale-etag\"")
+            ]
+        )
+
+        XCTAssertEqual(request.value(forHTTPHeaderField: "X-Client"), "Harbor")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Accept-Encoding"), "identity")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Range"), "bytes=128-")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "If-Range"), "\"current-etag\"")
+    }
+
+    func testDownloadRecordRoundTripPreservesHeadersAndTorrentOptions() throws {
+        let headers = [
+            RequestHeader(name: "User-Agent", value: "Harbor"),
+            RequestHeader(name: "Cookie", value: "session=secret")
+        ]
+        let item = DownloadItem(
+            sourceURL: URL(fileURLWithPath: "/tmp/source.torrent"),
+            sourceKind: .torrentFile,
+            backend: .aria2,
+            preferredFilename: nil,
+            destinationFolderPath: "/tmp",
+            status: .paused,
+            requestHeaders: headers,
+            downloadLimitOverride: .limited(kilobytesPerSecond: 512),
+            uploadLimitOverride: .unlimited,
+            torrentFingerprint: "fingerprint",
+            managedTorrentSourcePath: "/tmp/managed.torrent",
+            shouldSeedAfterDownload: true
+        )
+
+        let data = try JSONEncoder().encode(item.makeRecord())
+        let restored = try JSONDecoder().decode(DownloadRecord.self, from: data)
+
+        XCTAssertEqual(restored.requestHeaders, headers)
+        XCTAssertEqual(restored.downloadLimitOverride, .limited(kilobytesPerSecond: 512))
+        XCTAssertEqual(restored.uploadLimitOverride, .unlimited)
+        XCTAssertEqual(restored.torrentFingerprint, "fingerprint")
+        XCTAssertEqual(restored.managedTorrentSourcePath, "/tmp/managed.torrent")
+        XCTAssertTrue(restored.shouldSeedAfterDownload)
+    }
+
     func testQuickLookRequiresCompletedExistingLocalFiles() throws {
         let suiteName = "HarborTests.QuickLook.\(UUID().uuidString)"
         let userDefaults = UserDefaults(suiteName: suiteName)!
@@ -532,6 +667,7 @@ final class HarborModelAndSafetyTests: XCTestCase {
     func testLegacyCompletedTorrentDoesNotSeed() throws {
         let record = try legacyTorrentRecord(status: .completed)
 
+        XCTAssertTrue(record.requestHeaders.isEmpty)
         XCTAssertFalse(record.shouldSeedAfterDownload)
         XCTAssertFalse(record.removeOriginalTorrentAfterImport)
         XCTAssertTrue(record.completionNotificationDelivered)
@@ -741,6 +877,7 @@ final class HarborModelAndSafetyTests: XCTestCase {
             JSONSerialization.jsonObject(with: JSONEncoder().encode(record)) as? [String: Any]
         )
         [
+            "requestHeaders",
             "downloadLimitOverride",
             "uploadLimitOverride",
             "requiresMediaRecoveryReset",

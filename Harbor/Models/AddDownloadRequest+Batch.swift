@@ -9,7 +9,8 @@ extension AddDownloadRequest {
     static func batch(
         from urls: [URL],
         destinationFolder: URL,
-        shouldStartImmediately: Bool
+        shouldStartImmediately: Bool,
+        requestHeaders: [RequestHeader] = []
     ) -> [AddDownloadRequest] {
         urls.compactMap { url in
             guard let sourceKind = DownloadSourceKind.detect(from: url) else {
@@ -21,7 +22,8 @@ extension AddDownloadRequest {
                 sourceURL: url,
                 customFilename: nil,
                 destinationFolder: destinationFolder,
-                shouldStartImmediately: shouldStartImmediately
+                shouldStartImmediately: shouldStartImmediately,
+                requestHeaders: requestHeaders
             )
         }
     }

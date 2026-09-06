@@ -38,6 +38,10 @@ enum DownloadSourceKind: String, Codable, CaseIterable, Identifiable, Sendable {
         self == .directURL
     }
 
+    var usesAria2: Bool {
+        self == .magnetLink || self == .torrentFile
+    }
+
     static func detect(from url: URL) -> DownloadSourceKind? {
         if url.isFileURL {
             return url.pathExtension.lowercased() == "torrent" ? .torrentFile : nil

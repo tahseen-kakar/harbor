@@ -74,17 +74,20 @@ final class BatchAddDownloadTests: XCTestCase {
             URL(string: "magnet:?xt=urn:btih:abcdef")!,
             URL(string: "https://example.com/linux.torrent")!
         ]
+        let requestHeaders = [RequestHeader(name: "User-Agent", value: "Harbor")]
 
         let requests = AddDownloadRequest.batch(
             from: urls,
             destinationFolder: destination,
-            shouldStartImmediately: false
+            shouldStartImmediately: false,
+            requestHeaders: requestHeaders
         )
 
         XCTAssertEqual(requests.count, 3)
         XCTAssertTrue(requests.allSatisfy { $0.destinationFolder == destination })
         XCTAssertTrue(requests.allSatisfy { $0.shouldStartImmediately == false })
         XCTAssertTrue(requests.allSatisfy { $0.customFilename == nil })
+        XCTAssertTrue(requests.allSatisfy { $0.requestHeaders == requestHeaders })
 
         XCTAssertEqual(requests[0].sourceKind, .directURL)
         XCTAssertEqual(requests[1].sourceKind, .magnetLink)

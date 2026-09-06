@@ -234,9 +234,11 @@ enum DirectDownloadResponsePolicy {
 
     nonisolated static func request(
         sourceURL: URL,
-        recovery: DirectDownloadRecoverySnapshot?
+        recovery: DirectDownloadRecoverySnapshot?,
+        requestHeaders: [RequestHeader] = []
     ) -> URLRequest {
         var request = URLRequest(url: sourceURL)
+        requestHeaders.apply(to: &request)
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
 

@@ -4,17 +4,24 @@ struct TorrentContentsPreviewService: Sendable {
     func preview(
         sourceKind: DownloadSourceKind,
         sourceURL: URL,
+        requestHeaders: [RequestHeader],
         torrentService: Aria2TorrentService
     ) async throws -> TorrentContentsPreview {
         let data: Data
         switch sourceKind {
         case .magnetLink:
-            data = try await torrentService.previewMagnetMetainfo(at: sourceURL)
+            data = try await torrentService.previewMagnetMetainfo(
+                at: sourceURL,
+                requestHeaders: requestHeaders
+            )
         case .torrentFile:
             if sourceURL.isFileURL {
                 data = try readLocalTorrent(at: sourceURL)
             } else {
-                data = try await fetchRemoteTorrent(from: sourceURL)
+                data = try await TorrentSourceLoader.fetch(
+                    from: sourceURL,
+                    requestHeaders: requestHeaders
+                )
             }
         case .directURL, .mediaURL:
             throw TorrentEngineError.invalidSource
@@ -31,16 +38,5 @@ struct TorrentContentsPreviewService: Sendable {
             }
         }
         return try ManagedTorrentSourceStore.loadTorrentData(at: sourceURL)
-    }
-
-    private func fetchRemoteTorrent(from sourceURL: URL) async throws -> Data {
-        let (temporaryURL, response) = try await URLSession.shared.download(from: sourceURL)
-        guard let response = response as? HTTPURLResponse else {
-            throw ManagedTorrentSourceStoreError.invalidServerResponse
-        }
-        guard 200 ..< 300 ~= response.statusCode else {
-            throw ManagedTorrentSourceStoreError.unsuccessfulStatusCode(response.statusCode)
-        }
-        return try ManagedTorrentSourceStore.loadTorrentData(at: temporaryURL)
     }
 }

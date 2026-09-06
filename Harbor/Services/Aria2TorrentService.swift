@@ -466,6 +466,7 @@ actor Aria2TorrentService {
         sourceKind: DownloadSourceKind,
         sourceURL: URL,
         destinationFolderPath: String,
+        requestHeaders: [RequestHeader],
         transferOptions: TorrentTransferOptions? = nil
     ) async throws -> String {
         logger.info("Starting torrent add request for source kind \(String(describing: sourceKind), privacy: .public)")
@@ -483,6 +484,7 @@ actor Aria2TorrentService {
 
         var options = downloadOptions(
             destinationFolderPath: destinationFolderPath,
+            requestHeaders: requestHeaders,
             transferOptions: transferOptions
         )
         options["gid"] = gid
@@ -540,7 +542,10 @@ actor Aria2TorrentService {
         return returnedGID
     }
 
-    func previewMagnetMetainfo(at sourceURL: URL) async throws -> Data {
+    func previewMagnetMetainfo(
+        at sourceURL: URL,
+        requestHeaders: [RequestHeader]
+    ) async throws -> Data {
         guard let expectedInfoHash = ManagedTorrentSourceStore.normalizedInfoHash(
             MagnetLinkMetadata(url: sourceURL).infoHash
         ) else {
@@ -558,7 +563,7 @@ actor Aria2TorrentService {
         let gid = Self.makeSubmissionGID()
         do {
             try await ensureDaemonRunning()
-            let options = [
+            var options: [String: Any] = [
                 "gid": gid,
                 "dir": previewDirectory.path,
                 "pause": "false",
@@ -567,6 +572,9 @@ actor Aria2TorrentService {
                 "bt-save-metadata": "true",
                 "seed-time": "0"
             ]
+            if requestHeaders.isEmpty == false {
+                options["header"] = requestHeaders.map(\.aria2HeaderValue)
+            }
             let returnedGID = try await submitDownload(
                 method: "aria2.addUri",
                 params: [
@@ -1211,13 +1219,24 @@ actor Aria2TorrentService {
 
     private func downloadOptions(
         destinationFolderPath: String,
+        requestHeaders: [RequestHeader],
         transferOptions: TorrentTransferOptions?
-    ) -> [String: String] {
-        Self.downloadOptions(
+    ) -> [String: Any] {
+        let options = Self.downloadOptions(
             destinationFolderPath: destinationFolderPath,
             transferSettings: transferSettings,
             transferOptions: transferOptions
         )
+
+        var rpcOptions = options.reduce(into: [String: Any]()) { result, option in
+            result[option.key] = option.value
+        }
+
+        if requestHeaders.isEmpty == false {
+            rpcOptions["header"] = requestHeaders.map(\.aria2HeaderValue)
+        }
+
+        return rpcOptions
     }
 
     nonisolated static func downloadOptions(

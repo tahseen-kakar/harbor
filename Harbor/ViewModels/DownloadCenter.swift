@@ -70,6 +70,7 @@ final class DownloadCenter {
         DownloadSourceKind,
         URL,
         String,
+        [RequestHeader],
         TorrentTransferOptions
     ) async throws -> String
     typealias TorrentRemoveOperation = @Sendable (
@@ -224,11 +225,12 @@ final class DownloadCenter {
             try await service.pause(gid: gid)
         },
         torrentStartOperation: @escaping TorrentStartOperation = {
-            service, sourceKind, sourceURL, destinationFolderPath, transferOptions in
+            service, sourceKind, sourceURL, destinationFolderPath, requestHeaders, transferOptions in
             try await service.addDownload(
                 sourceKind: sourceKind,
                 sourceURL: sourceURL,
                 destinationFolderPath: destinationFolderPath,
+                requestHeaders: requestHeaders,
                 transferOptions: transferOptions
             )
         },
@@ -2503,11 +2505,13 @@ final class DownloadCenter {
 
     func previewTorrentContents(
         sourceKind: DownloadSourceKind,
-        sourceURL: URL
+        sourceURL: URL,
+        requestHeaders: [RequestHeader]
     ) async throws -> TorrentContentsPreview {
         try await TorrentContentsPreviewService().preview(
             sourceKind: sourceKind,
             sourceURL: sourceURL,
+            requestHeaders: requestHeaders,
             torrentService: torrentService
         )
     }
@@ -2588,6 +2592,7 @@ final class DownloadCenter {
             metadataName: request.torrentMetadataName ?? request.mediaMetadata?.title,
             mediaMetadata: request.mediaMetadata,
             mediaFormatPreference: request.mediaFormatPreference,
+            requestHeaders: request.requestHeaders,
             torrentFingerprint: managedTorrentSource?.fingerprint
                 ?? Self.normalizedMagnetInfoHash(for: request),
             torrentSourceFingerprint: managedTorrentSource?.sourceFingerprint,
@@ -2644,7 +2649,8 @@ final class DownloadCenter {
                 )
             } else {
                 managedSource = try await managedTorrentSourceStore.fetchRemoteTorrent(
-                    from: request.sourceURL
+                    from: request.sourceURL,
+                    requestHeaders: request.requestHeaders
                 )
             }
 
@@ -4275,7 +4281,10 @@ final class DownloadCenter {
                     originalURL: sourceURL
                 )
             } else {
-                managedSource = try await managedTorrentSourceStore.fetchRemoteTorrent(from: sourceURL)
+                managedSource = try await managedTorrentSourceStore.fetchRemoteTorrent(
+                    from: sourceURL,
+                    requestHeaders: item.requestHeaders
+                )
             }
 
             item.sourceURL = managedSource.originalURL
@@ -4622,6 +4631,7 @@ final class DownloadCenter {
                 id: item.id,
                 attemptIdentifier: attemptIdentifier,
                 sourceURL: item.sourceURL,
+                requestHeaders: item.requestHeaders,
                 speedLimitOverride: item.downloadLimitOverride
             )
         } catch {
@@ -5212,6 +5222,7 @@ final class DownloadCenter {
                         torrentEngineSourceKind(for: refreshedItem),
                         torrentEngineSourceURL(for: refreshedItem),
                         refreshedItem.destinationFolderPath,
+                        refreshedItem.requestHeaders,
                         torrentTransferOptions(for: refreshedItem)
                     )
 
@@ -5232,6 +5243,7 @@ final class DownloadCenter {
                     torrentEngineSourceKind(for: currentItem),
                     torrentEngineSourceURL(for: currentItem),
                     currentItem.destinationFolderPath,
+                    currentItem.requestHeaders,
                     torrentTransferOptions(for: currentItem)
                 )
                 guard item(for: id) != nil else {

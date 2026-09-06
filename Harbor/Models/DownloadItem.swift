@@ -135,6 +135,7 @@ struct DownloadRecord: Codable, Sendable {
     /// never populate it; WebKit continuation data uses `browserResumeData`.
     let resumeData: Data?
     let browserResumeData: Data?
+    let requestHeaders: [RequestHeader]
     let backendIdentifier: String?
     let metadataName: String?
     let mediaMetadata: MediaDownloadMetadata?
@@ -174,6 +175,7 @@ struct DownloadRecord: Codable, Sendable {
         case lastError
         case resumeData
         case browserResumeData
+        case requestHeaders
         case backendIdentifier
         case metadataName
         case mediaMetadata
@@ -214,6 +216,7 @@ struct DownloadRecord: Codable, Sendable {
         lastError: String?,
         resumeData: Data?,
         browserResumeData: Data? = nil,
+        requestHeaders: [RequestHeader] = [],
         backendIdentifier: String?,
         metadataName: String?,
         mediaMetadata: MediaDownloadMetadata? = nil,
@@ -252,6 +255,7 @@ struct DownloadRecord: Codable, Sendable {
         self.lastError = lastError
         self.resumeData = resumeData
         self.browserResumeData = browserResumeData
+        self.requestHeaders = requestHeaders
         self.backendIdentifier = backendIdentifier
         self.metadataName = metadataName
         self.mediaMetadata = mediaMetadata
@@ -294,6 +298,7 @@ struct DownloadRecord: Codable, Sendable {
         self.lastError = try container.decodeIfPresent(String.self, forKey: .lastError)
         self.resumeData = try container.decodeIfPresent(Data.self, forKey: .resumeData)
         self.browserResumeData = try container.decodeIfPresent(Data.self, forKey: .browserResumeData)
+        self.requestHeaders = try container.decodeIfPresent([RequestHeader].self, forKey: .requestHeaders) ?? []
         self.backendIdentifier = try container.decodeIfPresent(String.self, forKey: .backendIdentifier)
         self.metadataName = try container.decodeIfPresent(String.self, forKey: .metadataName)
         self.mediaMetadata = try container.decodeIfPresent(MediaDownloadMetadata.self, forKey: .mediaMetadata)
@@ -383,6 +388,7 @@ final class DownloadItem: Identifiable {
     var metadataName: String?
     var mediaMetadata: MediaDownloadMetadata?
     var mediaFormatPreference: MediaDownloadFormatPreference?
+    var requestHeaders: [RequestHeader]
     var requiresMediaRecoveryReset: Bool
     var mediaOutputConflictIdentifier: UUID?
     var downloadLimitOverride: TransferLimitOverride
@@ -425,6 +431,7 @@ final class DownloadItem: Identifiable {
         metadataName: String? = nil,
         mediaMetadata: MediaDownloadMetadata? = nil,
         mediaFormatPreference: MediaDownloadFormatPreference? = nil,
+        requestHeaders: [RequestHeader] = [],
         requiresMediaRecoveryReset: Bool = false,
         mediaOutputConflictIdentifier: UUID? = nil,
         downloadLimitOverride: TransferLimitOverride = .inherit,
@@ -466,6 +473,7 @@ final class DownloadItem: Identifiable {
         self.metadataName = metadataName
         self.mediaMetadata = mediaMetadata
         self.mediaFormatPreference = mediaFormatPreference
+        self.requestHeaders = requestHeaders
         self.requiresMediaRecoveryReset = requiresMediaRecoveryReset
         self.mediaOutputConflictIdentifier = mediaOutputConflictIdentifier
         self.downloadLimitOverride = downloadLimitOverride
@@ -518,6 +526,7 @@ final class DownloadItem: Identifiable {
             metadataName: record.metadataName,
             mediaMetadata: record.mediaMetadata,
             mediaFormatPreference: record.mediaFormatPreference,
+            requestHeaders: record.requestHeaders,
             requiresMediaRecoveryReset: record.requiresMediaRecoveryReset,
             mediaOutputConflictIdentifier: record.mediaOutputConflictIdentifier,
             downloadLimitOverride: record.downloadLimitOverride,
@@ -560,6 +569,7 @@ final class DownloadItem: Identifiable {
         metadataName = record.metadataName
         mediaMetadata = record.mediaMetadata
         mediaFormatPreference = record.mediaFormatPreference
+        requestHeaders = record.requestHeaders
         requiresMediaRecoveryReset = record.requiresMediaRecoveryReset
         mediaOutputConflictIdentifier = record.mediaOutputConflictIdentifier
         downloadLimitOverride = record.downloadLimitOverride
@@ -804,6 +814,7 @@ final class DownloadItem: Identifiable {
             lastError: lastError,
             resumeData: resumeData,
             browserResumeData: browserResumeData,
+            requestHeaders: requestHeaders,
             backendIdentifier: backendIdentifier,
             metadataName: metadataName,
             mediaMetadata: mediaMetadata?.persistenceSnapshot,

@@ -9,6 +9,11 @@ struct AddDownloadSheet: View {
         var id: String { "\(sourceKind.rawValue):\(sourceURL.absoluteString)" }
     }
 
+    private enum PendingSensitiveTorrentAction {
+        case preview(TorrentPreviewSource)
+        case submit([AddDownloadRequest])
+    }
+
     private enum Layout {
         static let groupedFormHorizontalExpansion: CGFloat = 20
     }
@@ -19,7 +24,7 @@ struct AddDownloadSheet: View {
 
     let settings: AppSettingsStore
     let mediaPreviewProvider: @MainActor (URL) async throws -> MediaDownloadMetadata?
-    let torrentPreviewProvider: @MainActor (DownloadSourceKind, URL) async throws -> TorrentContentsPreview
+    let torrentPreviewProvider: @MainActor (DownloadSourceKind, URL, [RequestHeader]) async throws -> TorrentContentsPreview
     let onSubmit: @MainActor ([AddDownloadRequest]) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -31,6 +36,8 @@ struct AddDownloadSheet: View {
     @State private var destinationPath: String
     @State private var hasCustomizedDestination = false
     @State private var shouldStartImmediately: Bool
+    @State private var requestHeaders: [RequestHeader] = []
+    @State private var isRequestHeadersEditorPresented = false
     @State private var validationMessage: String?
     @State private var mediaPreview: MediaDownloadMetadata?
     @State private var mediaPreviewError: String?
@@ -41,12 +48,14 @@ struct AddDownloadSheet: View {
     @State private var mediaPreviewTask: Task<Void, Never>?
     @State private var mediaPreviewGeneration = 0
     @State private var torrentPreviewSource: TorrentPreviewSource?
+    @State private var hasApprovedSensitiveTorrentHeaders = false
+    @State private var pendingSensitiveTorrentAction: PendingSensitiveTorrentAction?
 
     init(
         settings: AppSettingsStore,
         draft: AddDownloadSheetDraft,
         mediaPreviewProvider: @escaping @MainActor (URL) async throws -> MediaDownloadMetadata? = { _ in nil },
-        torrentPreviewProvider: @escaping @MainActor (DownloadSourceKind, URL) async throws -> TorrentContentsPreview = { _, _ in
+        torrentPreviewProvider: @escaping @MainActor (DownloadSourceKind, URL, [RequestHeader]) async throws -> TorrentContentsPreview = { _, _, _ in
             throw TorrentEngineError.invalidSource
         },
         onSubmit: @escaping @MainActor ([AddDownloadRequest]) -> Void
@@ -124,6 +133,8 @@ struct AddDownloadSheet: View {
 
                 Toggle("Start immediately", isOn: $shouldStartImmediately)
                     .accessibilityIdentifier(HarborAccessibility.addStartImmediately)
+
+                advancedSettingsSection
             }
             .formStyle(.grouped)
             .padding(.horizontal, -Layout.groupedFormHorizontalExpansion)
@@ -152,7 +163,7 @@ struct AddDownloadSheet: View {
 
                 if let torrentPreviewCandidate {
                     Button("Preview") {
-                        torrentPreviewSource = torrentPreviewCandidate
+                        presentTorrentPreview(torrentPreviewCandidate)
                     }
                     .accessibilityIdentifier(HarborAccessibility.addPreview)
                 }
@@ -194,7 +205,11 @@ struct AddDownloadSheet: View {
         .sheet(item: $torrentPreviewSource) { source in
             TorrentContentsSelectionSheet(
                 loadPreview: {
-                    try await torrentPreviewProvider(source.sourceKind, source.sourceURL)
+                    try await torrentPreviewProvider(
+                        source.sourceKind,
+                        source.sourceURL,
+                        requestHeaders
+                    )
                 },
                 onAdd: { preview, selection in
                     submitTorrentPreview(
@@ -203,6 +218,38 @@ struct AddDownloadSheet: View {
                         selection: selection
                     )
                 }
+            )
+        }
+        .sheet(isPresented: $isRequestHeadersEditorPresented) {
+            RequestHeadersEditor(
+                requestHeaders: requestHeaders
+            ) { updatedHeaders in
+                requestHeaders = updatedHeaders
+                hasApprovedSensitiveTorrentHeaders = false
+                validationMessage = nil
+            }
+        }
+        .alert(
+            "Sensitive headers may be shared",
+            isPresented: Binding(
+                get: { pendingSensitiveTorrentAction != nil },
+                set: { isPresented in
+                    if isPresented == false {
+                        pendingSensitiveTorrentAction = nil
+                    }
+                }
+            )
+        ) {
+            Button("Cancel", role: .cancel) {
+                pendingSensitiveTorrentAction = nil
+            }
+
+            Button("Continue") {
+                continuePendingSensitiveTorrentAction()
+            }
+        } message: {
+            Text(
+                "The supplied headers contain Cookie or Authorization information. aria2 may send these headers to every HTTP/HTTPS tracker and web seed used by this torrent. Proceed?"
             )
         }
     }
@@ -226,6 +273,16 @@ struct AddDownloadSheet: View {
         }
     }
 
+    private func presentTorrentPreview(_ source: TorrentPreviewSource) {
+        if requestHeaders.triggersSensitiveTorrentWarning,
+           hasApprovedSensitiveTorrentHeaders == false {
+            pendingSensitiveTorrentAction = .preview(source)
+            return
+        }
+
+        torrentPreviewSource = source
+    }
+
     @MainActor
     private func submitTorrentPreview(
         source: TorrentPreviewSource,
@@ -238,12 +295,12 @@ struct AddDownloadSheet: View {
             customFilename: nil,
             destinationFolder: URL(fileURLWithPath: destinationPath, isDirectory: true),
             shouldStartImmediately: shouldStartImmediately,
+            requestHeaders: requestHeaders,
             torrentFileSelection: selection,
             preparedTorrentMetainfo: preview.metainfoData,
             torrentMetadataName: preview.name
         )
-        onSubmit([request])
-        dismiss()
+        submitRequests([request])
     }
 
     @ViewBuilder
@@ -449,6 +506,18 @@ struct AddDownloadSheet: View {
                 }
                 .disabled(destinationPath == sourceAwareDefaultDestinationPath)
             }
+        }
+    }
+
+    private var advancedSettingsSection: some View {
+        DisclosureGroup("Advanced Settings") {
+            LabeledContent("Request Headers") {
+                Button("Configure…") {
+                    isRequestHeadersEditorPresented = true
+                }
+            }
+            .padding(.top, 10)
+            .padding(.leading, 24)
         }
     }
 
@@ -685,15 +754,15 @@ struct AddDownloadSheet: View {
             let requests = AddDownloadRequest.batch(
                 from: parsedBatchURLs,
                 destinationFolder: folderURL,
-                shouldStartImmediately: shouldStartImmediately
+                shouldStartImmediately: shouldStartImmediately,
+                requestHeaders: requestHeaders
             )
 
             guard requests.isEmpty == false else {
                 return
             }
 
-            onSubmit(requests)
-            dismiss()
+            submitRequests(requests)
             return
         }
 
@@ -782,20 +851,67 @@ struct AddDownloadSheet: View {
 
         let folderURL = URL(fileURLWithPath: destinationPath, isDirectory: true)
 
-        onSubmit(
-            [
-                AddDownloadRequest(
-                    sourceKind: sourceKind,
-                    sourceURL: sourceURL,
-                    customFilename: nil,
-                    destinationFolder: folderURL,
-                    shouldStartImmediately: shouldStartImmediately,
-                    mediaMetadata: requestMediaMetadata,
-                    mediaFormatPreference: requestMediaFormatPreference
-                )
-            ]
+        guard sourceKind != .mediaURL || requestHeaders.isEmpty else {
+            validationMessage = String(
+                localized: "add.validation.mediaHeadersUnsupported",
+                defaultValue: "Request headers aren’t supported for media downloads.",
+                comment: "Validation message shown when request headers are supplied for a yt-dlp media download."
+            )
+            return
+        }
+
+        let request = AddDownloadRequest(
+            sourceKind: sourceKind,
+            sourceURL: sourceURL,
+            customFilename: nil,
+            destinationFolder: folderURL,
+            shouldStartImmediately: shouldStartImmediately,
+            requestHeaders: requestHeaders,
+            mediaMetadata: requestMediaMetadata,
+            mediaFormatPreference: requestMediaFormatPreference
         )
+
+        submitRequests([request])
+    }
+
+    @MainActor
+    private func submitRequests(_ requests: [AddDownloadRequest]) {
+        if requests.contains(where: {
+            $0.sourceKind.usesAria2 && $0.requestHeaders.triggersSensitiveTorrentWarning
+        }),
+           hasApprovedSensitiveTorrentHeaders == false {
+            pendingSensitiveTorrentAction = .submit(requests)
+            return
+        }
+
+        performSubmission(requests)
+    }
+
+    @MainActor
+    private func performSubmission(_ requests: [AddDownloadRequest]) {
+        onSubmit(requests)
         dismiss()
+    }
+
+    private func continuePendingSensitiveTorrentAction() {
+        guard let action = pendingSensitiveTorrentAction else {
+            return
+        }
+
+        pendingSensitiveTorrentAction = nil
+        hasApprovedSensitiveTorrentHeaders = true
+
+        switch action {
+        case let .preview(source):
+            torrentPreviewSource = source
+        case let .submit(requests):
+            guard isSubmitting == false else {
+                return
+            }
+            isSubmitting = true
+            defer { isSubmitting = false }
+            performSubmission(requests)
+        }
     }
 
     @ViewBuilder

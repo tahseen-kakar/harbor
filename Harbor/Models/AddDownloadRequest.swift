@@ -6,6 +6,7 @@ struct AddDownloadRequest: Sendable {
     let customFilename: String?
     let destinationFolder: URL
     let shouldStartImmediately: Bool
+    let requestHeaders: [RequestHeader]
     let mediaMetadata: MediaDownloadMetadata?
     let mediaFormatPreference: MediaDownloadFormatPreference?
     let torrentFileSelection: TorrentFileSelection?
@@ -18,6 +19,7 @@ struct AddDownloadRequest: Sendable {
         customFilename: String?,
         destinationFolder: URL,
         shouldStartImmediately: Bool,
+        requestHeaders: [RequestHeader] = [],
         mediaMetadata: MediaDownloadMetadata? = nil,
         mediaFormatPreference: MediaDownloadFormatPreference? = nil,
         torrentFileSelection: TorrentFileSelection? = nil,
@@ -29,6 +31,7 @@ struct AddDownloadRequest: Sendable {
         self.customFilename = customFilename
         self.destinationFolder = destinationFolder
         self.shouldStartImmediately = shouldStartImmediately
+        self.requestHeaders = requestHeaders
         self.mediaMetadata = mediaMetadata
         self.mediaFormatPreference = mediaFormatPreference
         self.torrentFileSelection = torrentFileSelection

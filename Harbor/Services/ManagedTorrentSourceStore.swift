@@ -11,8 +11,6 @@ struct ManagedTorrentSource: Equatable, Sendable {
 enum ManagedTorrentSourceStoreError: LocalizedError {
     case emptyTorrent
     case torrentTooLarge
-    case invalidServerResponse
-    case unsuccessfulStatusCode(Int)
 
     var errorDescription: String? {
         switch self {
@@ -27,21 +25,6 @@ enum ManagedTorrentSourceStoreError: LocalizedError {
                 localized: "torrent.import.tooLarge",
                 defaultValue: "The torrent file is too large.",
                 comment: "Error shown when a torrent file exceeds Harbor's safe metadata size limit."
-            )
-        case .invalidServerResponse:
-            String(
-                localized: "torrent.import.invalidResponse",
-                defaultValue: "The torrent server returned an invalid response.",
-                comment: "Error shown when a remote torrent URL does not return an HTTP response."
-            )
-        case let .unsuccessfulStatusCode(statusCode):
-            String(
-                format: String(
-                    localized: "torrent.import.httpStatus",
-                    defaultValue: "The torrent server returned HTTP status %lld.",
-                    comment: "Error shown when a remote torrent URL returns a failing HTTP status."
-                ),
-                Int64(statusCode)
             )
         }
     }
@@ -76,16 +59,12 @@ actor ManagedTorrentSourceStore {
 
     func fetchRemoteTorrent(
         from remoteURL: URL,
-        using session: URLSession = .shared
+        requestHeaders: [RequestHeader]
     ) async throws -> ManagedTorrentSource {
-        let (temporaryURL, response) = try await session.download(from: remoteURL)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw ManagedTorrentSourceStoreError.invalidServerResponse
-        }
-        guard 200 ..< 300 ~= httpResponse.statusCode else {
-            throw ManagedTorrentSourceStoreError.unsuccessfulStatusCode(httpResponse.statusCode)
-        }
-        let data = try Self.loadTorrentData(at: temporaryURL, fileManager: fileManager)
+        let data = try await TorrentSourceLoader.fetch(
+            from: remoteURL,
+            requestHeaders: requestHeaders
+        )
         return try persist(data: data, originalURL: remoteURL)
     }
 

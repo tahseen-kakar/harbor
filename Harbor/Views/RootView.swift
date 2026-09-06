@@ -64,10 +64,11 @@ struct RootView: View {
                 mediaPreviewProvider: { url in
                     try await center.previewMediaDownload(for: url)
                 },
-                torrentPreviewProvider: { sourceKind, url in
+                torrentPreviewProvider: { sourceKind, url, requestHeaders in
                     try await center.previewTorrentContents(
                         sourceKind: sourceKind,
-                        sourceURL: url
+                        sourceURL: url,
+                        requestHeaders: requestHeaders
                     )
                 }
             ) { requests in
