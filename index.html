@@ -293,6 +293,56 @@
       line-height: 1.5;
     }
 
+    .roadmap-grid {
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+
+    .roadmap-grid .feature-card {
+      display: grid;
+      grid-template-columns: 36px minmax(0, 1fr);
+      column-gap: 16px;
+      min-height: auto;
+      padding: 18px 20px;
+    }
+
+    .roadmap-grid .feature-icon {
+      grid-row: 1 / span 2;
+    }
+
+    .roadmap-grid .feature-card h3 {
+      align-self: end;
+      margin: 0;
+    }
+
+    .roadmap-grid .feature-card p {
+      margin-top: 5px;
+    }
+
+    .feature-cta {
+      width: min(980px, 100%);
+      margin: 54px auto 0;
+      padding: 34px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: rgb(255 255 255 / 72%);
+      text-align: center;
+    }
+
+    .feature-cta h2 {
+      margin: 0;
+      font-size: clamp(24px, 3vw, 32px);
+      line-height: 1.15;
+      font-weight: 580;
+    }
+
+    .feature-cta p {
+      margin: 10px auto 20px;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.5;
+    }
+
     .footer {
       display: flex;
       align-items: center;
@@ -366,6 +416,11 @@
       .feature-section,
       .feature-section + .feature-section {
         margin-top: 44px;
+      }
+
+      .feature-cta {
+        margin-top: 44px;
+        padding: 28px 20px;
       }
     }
 
@@ -522,7 +577,7 @@
           <h2 class="section-heading" id="roadmap-title">More features coming soon</h2>
           <p class="section-copy">The next improvements are shaped by Harbor’s open roadmap and community requests.</p>
 
-          <div class="feature-grid">
+          <div class="feature-grid roadmap-grid">
             <article class="feature-card">
               <span class="feature-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="15" rx="2"/><path d="M3 8h18"/><path d="m10 12 5 3-5 3Z"/></svg>
@@ -620,6 +675,12 @@
             </article>
           </div>
         </section>
+
+        <aside class="feature-cta" aria-labelledby="feature-request-title">
+          <h2 id="feature-request-title">Have a feature request?</h2>
+          <p>Share your idea and help shape what Harbor builds next.</p>
+          <a class="button primary" href="https://github.com/thsnkhn/harbor/issues/new">Request a feature</a>
+        </aside>
 
         <footer class="footer">
           <a class="small-link" href="https://github.com/thsnkhn/harbor/blob/main/LICENSE">GPLv3 License</a>
