@@ -216,6 +216,83 @@
       height: auto;
     }
 
+    .feature-section {
+      width: min(980px, 100%);
+      margin: 54px auto 0;
+    }
+
+    .feature-section + .feature-section {
+      margin-top: 64px;
+    }
+
+    .section-heading {
+      margin: 0;
+      font-size: clamp(28px, 4vw, 40px);
+      line-height: 1.1;
+      font-weight: 580;
+      letter-spacing: -.02em;
+      text-align: center;
+    }
+
+    .section-copy {
+      max-width: 620px;
+      margin: 12px auto 0;
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1.5;
+      text-align: center;
+    }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin: 24px 0 0;
+      text-align: left;
+    }
+
+    .feature-card {
+      min-height: 174px;
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgb(255 255 255 / 72%);
+    }
+
+    .feature-icon {
+      display: grid;
+      place-items: center;
+      width: 36px;
+      height: 36px;
+      color: #ad4e00;
+      border-radius: 10px;
+      background: rgb(255 159 28 / 18%);
+    }
+
+    .feature-icon svg {
+      width: 20px;
+      height: 20px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .feature-card h3 {
+      margin: 18px 0 0;
+      font-size: 16px;
+      line-height: 1.25;
+      font-weight: 620;
+    }
+
+    .feature-card p {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
     .footer {
       display: flex;
       align-items: center;
@@ -277,6 +354,25 @@
         margin-top: 34px;
         border-radius: 14px;
       }
+
+      .feature-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .feature-card {
+        min-height: auto;
+      }
+
+      .feature-section,
+      .feature-section + .feature-section {
+        margin-top: 44px;
+      }
+    }
+
+    @media (min-width: 701px) and (max-width: 960px) {
+      .feature-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -294,7 +390,6 @@
       <div class="nav">
         <a href="https://github.com/thsnkhn/harbor">GitHub</a>
         <a href="updates/Harbor-1.4.0.md">Changelog</a>
-        <a href="appcast.xml">Appcast</a>
       </div>
     </nav>
 
@@ -303,7 +398,7 @@
         <img class="app-icon" src="assets/icon-256.png" alt="Harbor app icon" width="116" height="116">
         <h1 id="hero-title">Harbor</h1>
         <p class="tagline">Download torrents and public media links on macOS.</p>
-        <p class="subline">A free, open-source Mac downloader for torrents, magnet links, YouTube, Instagram, TikTok, Pinterest, and other public URLs supported by yt-dlp.</p>
+        <p class="subline">A free, open-source Mac downloader for torrents, magnet links, YouTube, Instagram, TikTok, Pinterest, and other supported public URLs.</p>
 
         <div class="actions" aria-label="Download actions">
           <a class="button primary" href="https://github.com/thsnkhn/harbor/releases/latest/download/Harbor.dmg">Download for Mac</a>
@@ -314,16 +409,219 @@
           <span>macOS 15.6+</span>
           <span class="dot" aria-hidden="true"></span>
           <span>Intel and Apple silicon</span>
-          <span class="dot" aria-hidden="true"></span>
-          <span>Public content only</span>
         </div>
 
         <div class="screenshot-wrap" aria-label="Harbor app screenshot">
           <img src="assets/harbor-screenshot.webp" alt="Harbor showing the downloads sidebar and download detail view" width="1400" height="788">
         </div>
 
+        <section class="feature-section" aria-labelledby="features-title">
+          <h2 class="section-heading" id="features-title">Built for everyday downloads</h2>
+          <p class="section-copy">Everything you need to manage torrents, public media, and active transfers on your Mac.</p>
+
+          <div class="feature-grid">
+          <article class="feature-card">
+            <span class="feature-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M5 12a7 7 0 0 1 12-4.9L19 9"/><path d="M19 4v5h-5"/><path d="M19 12a7 7 0 0 1-12 4.9L5 15"/><path d="M5 20v-5h5"/></svg>
+            </span>
+            <h3>Torrents and magnets</h3>
+            <p>Open torrent files or paste magnet links and manage them in one queue.</p>
+          </article>
+
+          <article class="feature-card">
+            <span class="feature-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m10 9 5 3-5 3Z"/></svg>
+            </span>
+            <h3>Public media links</h3>
+            <p>Download videos and audio from public URLs supported by yt-dlp.</p>
+          </article>
+
+          <article class="feature-card">
+            <span class="feature-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H10l2 2h5.5A2.5 2.5 0 0 1 20 8.5v9A2.5 2.5 0 0 1 17.5 20h-11A2.5 2.5 0 0 1 4 17.5Z"/><path d="m9 13 2 2 4-4"/></svg>
+            </span>
+            <h3>Preview torrent files</h3>
+            <p>Preview torrent contents and download only the files you need.</p>
+          </article>
+
+          <article class="feature-card">
+            <span class="feature-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M4 7h10"/><path d="M18 7h2"/><circle cx="16" cy="7" r="2"/><path d="M4 17h2"/><path d="M10 17h10"/><circle cx="8" cy="17" r="2"/></svg>
+            </span>
+            <h3>Download profiles</h3>
+            <p>Switch between Unlimited, Balanced, Quiet, and Custom traffic modes.</p>
+          </article>
+
+          <article class="feature-card">
+            <span class="feature-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3"/><path d="M6.5 19a5.5 5.5 0 0 1 11 0"/><path d="M19 5v4"/><path d="M17 7h4"/></svg>
+            </span>
+            <h3>Individual profiles</h3>
+            <p>Override the traffic mode and speed limits for a single download.</p>
+          </article>
+
+          <article class="feature-card">
+            <span class="feature-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M8 7h11"/><path d="M8 12h11"/><path d="M8 17h11"/><path d="m3.5 7 .8.8L6 6"/><path d="m3.5 12 .8.8L6 11"/><path d="m3.5 17 .8.8L6 16"/></svg>
+            </span>
+            <h3>Batch downloads</h3>
+            <p>Paste multiple links and add the supported downloads in one step.</p>
+          </article>
+
+          <article class="feature-card">
+            <span class="feature-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M3 7h6l2 2h10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M12 12v5"/><path d="m10 15 2 2 2-2"/></svg>
+            </span>
+            <h3>Watch folders</h3>
+            <p>Automatically add torrent files placed in a folder you choose.</p>
+          </article>
+
+          <article class="feature-card">
+            <span class="feature-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/><path d="M5 4 3 6"/></svg>
+            </span>
+            <h3>Download activity</h3>
+            <p>Review status changes and key events for each download.</p>
+          </article>
+
+          <article class="feature-card">
+            <span class="feature-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/><circle cx="8" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="10" cy="18" r="2"/></svg>
+            </span>
+            <h3>Advanced controls</h3>
+            <p>Set request headers, connection counts, destinations, and seeding rules.</p>
+          </article>
+
+          <article class="feature-card">
+            <span class="feature-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M12 3v8"/><path d="M8 7 12 3l4 4"/><path d="M5 10a8 8 0 1 0 14 0"/><path d="M8 19h8"/></svg>
+            </span>
+            <h3>Ready when you are</h3>
+            <p>Start Harbor at login and keep your Mac awake during active downloads.</p>
+          </article>
+
+          <article class="feature-card">
+            <span class="feature-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M4 17h2"/><path d="M9 17h2"/><path d="M14 17h2"/><path d="M19 17h1"/><path d="M6 13a8 8 0 0 1 12 0"/><path d="M9 10a4.5 4.5 0 0 1 6 0"/></svg>
+            </span>
+            <h3>Network interface</h3>
+            <p>Bind torrent traffic to a selected service or network interface.</p>
+          </article>
+
+          <article class="feature-card">
+            <span class="feature-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/><path d="m9 12 2 2 4-4"/></svg>
+            </span>
+            <h3>Automatic updates</h3>
+            <p>Let Harbor check for new signed releases and install them in the app.</p>
+          </article>
+          </div>
+        </section>
+
+        <section class="feature-section" aria-labelledby="roadmap-title">
+          <h2 class="section-heading" id="roadmap-title">More features coming soon</h2>
+          <p class="section-copy">The next improvements are shaped by Harbor’s open roadmap and community requests.</p>
+
+          <div class="feature-grid">
+            <article class="feature-card">
+              <span class="feature-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="15" rx="2"/><path d="M3 8h18"/><path d="m10 12 5 3-5 3Z"/></svg>
+              </span>
+              <h3>Browser integrations</h3>
+              <p>Send links to Harbor from Safari, Chrome, and other Chromium browsers.</p>
+            </article>
+
+            <article class="feature-card">
+              <span class="feature-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><rect x="7" y="5" width="12" height="15" rx="2"/><path d="M9 5V3h6v2"/><path d="M5 8H3v10a2 2 0 0 0 2 2"/></svg>
+              </span>
+              <h3>Clipboard watcher</h3>
+              <p>Detect supported links on your clipboard and ask before adding them.</p>
+            </article>
+
+            <article class="feature-card">
+              <span class="feature-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M4 5h7l2 3h7v11H4Z"/><path d="M8 13h8"/><path d="M8 16h5"/></svg>
+              </span>
+              <h3>Tags and smart folders</h3>
+              <p>Organize downloads and route new files to destinations automatically.</p>
+            </article>
+
+            <article class="feature-card">
+              <span class="feature-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/><path d="M4 4 2 6"/><path d="M20 4 22 6"/></svg>
+              </span>
+              <h3>Queue planning</h3>
+              <p>Schedule start times, reorder queued work, and add media without waiting.</p>
+            </article>
+
+            <article class="feature-card">
+              <span class="feature-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><circle cx="7" cy="12" r="3"/><circle cx="17" cy="7" r="3"/><circle cx="17" cy="17" r="3"/><path d="m9.5 10.5 5-2"/><path d="m9.5 13.5 5 2"/></svg>
+              </span>
+              <h3>Proxy support</h3>
+              <p>Route direct and torrent downloads through system or manual proxies.</p>
+            </article>
+
+            <article class="feature-card">
+              <span class="feature-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M4 18V8"/><path d="M9 18V5"/><path d="M14 18v-7"/><path d="M19 18V3"/><path d="M3 18h18"/></svg>
+              </span>
+              <h3>Deeper torrent controls</h3>
+              <p>Manage trackers, forwarded ports, and peer blocklists from Harbor.</p>
+            </article>
+
+            <article class="feature-card">
+              <span class="feature-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M5 4h10l4 4v12H5Z"/><path d="M15 4v5h4"/><path d="m8 14 2 2 5-5"/></svg>
+              </span>
+              <h3>File verification</h3>
+              <p>Check file hashes and adopt existing torrent data without downloading it again.</p>
+            </article>
+
+            <article class="feature-card">
+              <span class="feature-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M4 16h3l2-5 3 8 3-12 2 9h3"/><path d="M4 4v16h16"/></svg>
+              </span>
+              <h3>Progress everywhere</h3>
+              <p>See ETA, aggregate progress, and quick controls in the list, Dock, and menu bar.</p>
+            </article>
+
+            <article class="feature-card">
+              <span class="feature-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/><path d="M8 11h6"/><path d="M11 8v6"/></svg>
+              </span>
+              <h3>More download sources</h3>
+              <p>Explore torrent search, Usenet, Debrid services, and one-click hosters.</p>
+            </article>
+
+            <article class="feature-card">
+              <span class="feature-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M6 15h5"/><path d="M6 11h8"/><path d="M17 14h1"/></svg>
+              </span>
+              <h3>Media subtitles</h3>
+              <p>Choose subtitle languages and save captions alongside supported media.</p>
+            </article>
+
+            <article class="feature-card">
+              <span class="feature-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M5 5h14v14H5Z"/><path d="M8 9h8"/><path d="M8 13h5"/><path d="m15 16 3-3"/></svg>
+              </span>
+              <h3>Rename active downloads</h3>
+              <p>Change download names and their files while work is still in progress.</p>
+            </article>
+
+            <article class="feature-card">
+              <span class="feature-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="m7 8-4 4 4 4"/><path d="M3 12h8"/><path d="m17 8 4 4-4 4"/><path d="M21 12h-8"/></svg>
+              </span>
+              <h3>CLI and MCP controls</h3>
+              <p>Add downloads, inspect the queue, and control Harbor from local automation.</p>
+            </article>
+          </div>
+        </section>
+
         <footer class="footer">
-          <span>Harbor does not bypass private accounts, DRM, authentication, or platform security controls.</span>
           <a class="small-link" href="https://github.com/thsnkhn/harbor/blob/main/LICENSE">GPLv3 License</a>
         </footer>
       </div>
