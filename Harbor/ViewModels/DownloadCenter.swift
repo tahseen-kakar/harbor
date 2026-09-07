@@ -117,7 +117,7 @@ final class DownloadCenter {
     @ObservationIgnored private let torrentService: Aria2TorrentService
     @ObservationIgnored private var mediaService: MediaDownloadService! = nil
     private var initializationState: InitializationState = .notLoaded
-    @ObservationIgnored private var initializationWaiters: [CheckedContinuation<Void, Never>] = []
+    @ObservationIgnored private var initializationTask: Task<Void, Never>?
     @ObservationIgnored private var hasInstalledExternalOpenHandler = false
     @ObservationIgnored private var persistTask: Task<Void, Never>?
     @ObservationIgnored private var torrentRefreshTask: Task<Void, Never>?
@@ -181,7 +181,7 @@ final class DownloadCenter {
             pruneSelectionToVisibleDownloads()
         }
     }
-    var sortOrder = [KeyPathComparator(\DownloadItem.updatedAt, order: .reverse)]
+    var sortOrder = [KeyPathComparator(\DownloadItem.createdAt, order: .reverse)]
     var addSheetDraft: AddDownloadSheetDraft?
     var activeBrowserSession: BrowserDownloadSession?
     var activeAlert: UserAlert?
@@ -334,6 +334,26 @@ final class DownloadCenter {
     }
 
     func initializeIfNeeded() async {
+        if let initializationTask {
+            await initializationTask.value
+            return
+        }
+
+        guard initializationState == .notLoaded,
+              isShuttingDown == false else {
+            return
+        }
+
+        // Startup belongs to the center; a window task can disappear during a file open.
+        let task = Task { @MainActor in
+            await self.initialize()
+            self.initializationTask = nil
+        }
+        initializationTask = task
+        await task.value
+    }
+
+    private func initialize() async {
         guard initializationState == .notLoaded,
               isShuttingDown == false else {
             return
@@ -341,11 +361,6 @@ final class DownloadCenter {
 
         let isRetryingInitialization = initializationFailureMessage != nil
         initializationState = .loading
-        defer {
-            let waiters = initializationWaiters
-            initializationWaiters.removeAll()
-            waiters.forEach { $0.resume() }
-        }
         initializationFailureMessage = nil
         if isRetryingInitialization {
             activeAlert = nil
@@ -6035,12 +6050,7 @@ final class DownloadCenter {
     }
 
     private func waitForInitializationToFinish() async {
-        guard initializationState == .loading else {
-            return
-        }
-        await withCheckedContinuation { continuation in
-            initializationWaiters.append(continuation)
-        }
+        await initializationTask?.value
     }
 
     private func refreshTorrentDownloads() async {

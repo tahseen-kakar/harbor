@@ -3,6 +3,52 @@ import XCTest
 @testable import Harbor
 
 extension HarborModelAndSafetyTests {
+    func testCancelledWindowTaskStillRestoresAndPresentsQueuedTorrent() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("HarborCancelledStartup-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let settings = HarborPreviewFixtures.makeSettings()
+        settings.startDownloadsAutomatically = false
+        let persistence = DownloadPersistence(directoryURL: root.appendingPathComponent("Records"))
+        let savedItem = DownloadItem(
+            sourceURL: URL(string: "https://example.test/saved.bin")!,
+            sourceKind: .directURL,
+            backend: .urlSession,
+            preferredFilename: nil,
+            destinationFolderPath: root.path,
+            status: .paused
+        )
+        try await persistence.save([savedItem.makeRecord()])
+        let center = DownloadCenter(
+            settings: settings,
+            persistence: persistence,
+            directRecoveryDirectoryURL: root.appendingPathComponent("Direct"),
+            completedHandoffDirectoryURL: root.appendingPathComponent("Handoffs"),
+            browserRecoveryDirectoryURL: root.appendingPathComponent("Browser"),
+            mediaService: MediaDownloadService(
+                eventHandler: { _, _ in },
+                temporaryRoot: root.appendingPathComponent("Media")
+            ),
+            torrentShutdownOperation: { _ in }
+        )
+        let torrentURL = root.appendingPathComponent("example.torrent")
+        center.receiveExternalAddSources([torrentURL])
+
+        let windowTask = Task { @MainActor in
+            withUnsafeCurrentTask { $0?.cancel() }
+            await center.initializeIfNeeded()
+        }
+        await windowTask.value
+
+        XCTAssertTrue(center.canAddDownloads)
+        XCTAssertNil(center.initializationFailureMessage)
+        XCTAssertNil(center.activeAlert)
+        XCTAssertEqual(center.downloads.map(\.id), [savedItem.id])
+        XCTAssertEqual(center.addSheetDraft?.torrentFileURL, torrentURL)
+        let shutdownSucceeded = await center.shutdownForTermination()
+        XCTAssertTrue(shutdownSucceeded)
+    }
+
     func testDownloadMutationsWaitForAuthoritativeInitialization() async throws {
         let fileManager = FileManager.default
         let testRoot = fileManager.temporaryDirectory
@@ -15,6 +61,8 @@ extension HarborModelAndSafetyTests {
         defer { userDefaults.removePersistentDomain(forName: suiteName) }
         let settings = AppSettingsStore(userDefaults: userDefaults)
         settings.startDownloadsAutomatically = false
+        let saveStarted = AsyncStream<Void>.makeStream()
+        let allowSave = AsyncStream<Void>.makeStream()
         let center = DownloadCenter(
             settings: settings,
             persistence: DownloadPersistence(
@@ -28,7 +76,14 @@ extension HarborModelAndSafetyTests {
                 fileManager: fileManager,
                 temporaryRoot: testRoot.appendingPathComponent("MediaRecovery")
             ),
-            torrentShutdownOperation: { _ in }
+            torrentShutdownOperation: { _ in },
+            recordSaveOperation: { persistence, records, revision in
+                saveStarted.continuation.yield(())
+                var iterator = allowSave.stream.makeAsyncIterator()
+                _ = await iterator.next()
+                try Task.checkCancellation()
+                try await persistence.save(records, revision: revision)
+            }
         )
 
         XCTAssertFalse(center.canAddDownloads)
@@ -51,7 +106,23 @@ extension HarborModelAndSafetyTests {
         center.receiveExternalAddSources([externalURL])
         XCTAssertNil(center.addSheetDraft)
 
-        await center.initializeIfNeeded()
+        let windowTask = Task { await center.initializeIfNeeded() }
+        var saveIterator = saveStarted.stream.makeAsyncIterator()
+        _ = await saveIterator.next()
+        windowTask.cancel()
+        var secondCallerFinished = false
+        let secondCaller = Task { @MainActor in
+            await center.initializeIfNeeded()
+            secondCallerFinished = true
+        }
+        for _ in 0 ..< 20 { await Task.yield() }
+        XCTAssertFalse(secondCallerFinished)
+        XCTAssertFalse(center.canAddDownloads)
+        XCTAssertNil(center.addSheetDraft)
+        allowSave.continuation.finish()
+        await windowTask.value
+        await secondCaller.value
+        saveStarted.continuation.finish()
 
         XCTAssertTrue(center.canAddDownloads)
         XCTAssertEqual(center.addSheetDraft?.sourceURLText, externalURL.absoluteString)

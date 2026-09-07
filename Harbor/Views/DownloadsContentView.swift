@@ -74,12 +74,12 @@ struct DownloadsContentView: View {
                     .customizationID("speed")
                     .defaultVisibility(.visible)
 
-                    TableColumn("Updated", value: \.updatedAt) { item in
-                        Text(DownloadFormatting.dateString(item.updatedAt))
+                    TableColumn("Created", value: \.createdAt) { item in
+                        Text(DownloadFormatting.dateString(item.createdAt))
                             .font(.caption)
                     }
                     .width(170)
-                    .customizationID("updated")
+                    .customizationID("created")
                     .defaultVisibility(.visible)
                 } rows: {
                     ForEach(downloads) { item in
